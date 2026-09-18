@@ -7,6 +7,7 @@
 	"vibecode": "https://www.justfuckingcode.com/",
 	"xy": "https://xyproblem.info/",
 	"netetiquette": "https://mywiki.wooledge.org/NetEtiquette",
+		"netiquette": "/netetiquette",
 	"dontasktoask": "https://dontasktoask.com/", 
 	"source": "https://github.com/cootshk/cootshk.dev",
 	"redirects": "/redirects.json",
