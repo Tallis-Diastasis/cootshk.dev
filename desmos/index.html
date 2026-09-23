@@ -1,15 +1,7 @@
 <!DOCTYPE html>
 <html lang="en_us">
 	<head>
-		<style>
-			iframe, :root, body {
-				width: 100vw;
-				height: 100vh;
-				margin: 0;
-				padding: 0;
-				border: none;
-			}
-		</style>
+		<link rel="stylesheet" href="/desmos/desmos.css" />
 		<link rel="icon" href="/_/desmos/assets/img/apps/graphing/favicon.ico" type="image/x-icon">
 		<meta property="og:site_name" content="Desmos">
 		<meta content="Desmos" property="og:title" />
@@ -18,55 +10,26 @@
 		<meta content="https://i3.ytimg.com/vi/pX7nsPPWYy0/maxresdefault.jpg" property="og:image" />
 		<meta content="#187A3D" data-react-helmet="true" name="theme-color" />
 		<title>Desmos | Graphing Calculator (modded)</title>
+		<script src="/cdn/common.js" defer></script>
+		<script src="/cdn/fengari-web.js" defer></script>
+		<!-- The extensions themselves are listed in extensions/extensions.json, and the ones
+		     that are turned on are fetched from there at load time. -->
+		<script src="/desmos/extensions.js" defer></script>
+		<script src="/desmos/desmos.js" defer></script>
 	</head>
 	<body>
-		<iframe id="desmos" src="https://cootshk.dev/_/desmos/calculator"></iframe>
-		<script>
-			const iframe = document.getElementById('desmos');
-			const iframeWin = iframe.contentWindow || iframe;
-			const iframeDoc = iframe.contentDocument || iframeWin.document;
-			var script = iframeDoc.createElement("script");
-			script.append(`
-			// Matrix Userscript
-			// Shoutout to Tyrcnex for the original
-				console.log("Injecting...");
-				// ==UserScript==
-				// @name        matrices (beta)
-				// @match       *://www.desmos.com/*
-				// @description e
-				// @grant       none
-				// @version     1.5
-				// @run-at      document-start
-				// @author      Cootshk
-				// ==/UserScript==
+		<!-- populated by JS -->
+		<iframe id="desmos" title="Desmos"></iframe>
 
-				window.Worker = new Proxy(Worker, {
-					construct(t, a) {
-						if (a[0].startsWith("blob:")) {
-							let xhr = new XMLHttpRequest
-							xhr.open("GET", a[0], false)
-							xhr.send()
-							let h = xhr.responseText.replace(/\\w+\\.includes\\(\\w+\\)\\|\\|(?=.\\.restrictedFunctions)/, "")
-							a[0] = URL.createObjectURL(new Blob([h]))
-						}
-						return new t(...a)
-					}
-				});
-				const c = setInterval(_ => {
-					if (!window.Calc) return;
-					Calc._calc.graphSettings.config.matrices = true;
-					let o = Calc.controller.getMathquillConfig;
-					Calc.controller.getMathquillConfig = e => {
-						let g = o.call(Calc.controller, e);
-						g.autoOperatorNames += " rowMatrix zeroMatrix hcat vcat rows columns det trace rref matrixElement rowCount colCount submatrix";
-						return g;
-					}
-					clearInterval(c);
-				}, 999);
-				console.log("Loaded!");
-			`);
-			iframeDoc.documentElement.appendChild(script);
-			console.log("Injected successfully!");
-		</script>
+		<!-- Populated by extensionSettings(). Only reachable when ?ext= is absent. -->
+		<div id="ext-ui">
+			<div id="ext-panel" hidden>
+				<strong>Extensions</strong>
+				<div id="ext-list"></div>
+				<p id="ext-note" hidden>?ext= in the URL is overriding these.</p>
+				<button id="ext-reload" type="button" hidden>Reload</button>
+			</div>
+			<button id="ext-toggle" type="button" title="Extensions" aria-label="Extensions">&#9881;</button>
+		</div>
 	</body>
 </html>

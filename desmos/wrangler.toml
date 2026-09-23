@@ -1,17 +1,12 @@
+# wrangler release file
 name = "desmos-proxy"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
-# TODO: look up routes based on a dictionary and choose the hostname
 routes = [
-  { pattern = "cootshk.dev/_/desmos/*", zone_name = "cootshk.dev" },
-  # { pattern = "www.cootshk.dev/_/desmos/*", zone_name = "cootshk.dev" },
+  { pattern = "cootshk.dev/_/*", zone_name = "cootshk.dev" },
 ]
 
 workers_dev = false
 
-# Upload worker.js verbatim. esbuild's keep-names pass rewrites the nested functions inside
-# clientBootstrap into `__name(f, "f")` calls, but that function is serialized with toString()
-# and run in the browser, where no such helper exists. Only turn this off if worker.js ever
-# gains real imports - and then re-check that /_/desmos/_proxy/bootstrap.js still parses.
 no_bundle = true

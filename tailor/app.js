@@ -1,8 +1,5 @@
 /* ── Tailor: Fabric Mod Analyzer ── */
 
-const $ = (s, p = document) => p.querySelector(s);
-const $$ = (s, p = document) => [...p.querySelectorAll(s)];
-
 // ── Navigation stack for drilling into JiJ mods ──
 let modStack = []; // stack of parsed mod objects
 let modrinthLookup = {}; // sha1 -> { projectId, slug, versionId }

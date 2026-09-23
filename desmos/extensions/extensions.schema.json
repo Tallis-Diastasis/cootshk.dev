@@ -1,0 +1,83 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://cootshk.dev/desmos/extensions/extensions.schema.json",
+    "title": "Desmos extension manifest",
+    "description": "A list of all of the extensions available",
+    "type": "object",
+    "required": ["extensions"],
+    "additionalProperties": false,
+    "properties": {
+        "extensions": {
+            "type": "object",
+            "description": "Extensions are keyed by id, which is used in almost all places.",
+            "propertyNames": { "$ref": "#/$defs/id" },
+            "additionalProperties": { "$ref": "#/$defs/extension" }
+        },
+        "defaultExtensions": {
+            "type": "array",
+            "description": "Extensions to load if the URL doesn't specify any",
+            "items": { "$ref": "#/$defs/id" },
+            "uniqueItems": true
+        }
+    },
+    "$defs": {
+        "id": {
+            "type": "string",
+            "description": "An extension id: lowercase, and free of the \",\" and \"@\" that separate entries and arguments in ?ext=.",
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "extension": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The label in the settings panel. Defaults to the id.",
+                    "minLength": 1
+                },
+                "description": {
+                    "type": "string",
+                    "description": "The tooltip on that label. Defaults to nothing."
+                },
+                "supports": {
+                    "type": "array",
+                    "description": "The calculators this extension is for. Leave it out for all of them. An extension aimed at the wrong calculator is not just useless - DesModder, for one, waits forever on a bundle that calculator never loads - so it is skipped there, and its checkbox is disabled.",
+                    "items": { "$ref": "#/$defs/mode" },
+                    "minItems": 1,
+                    "uniqueItems": true
+                },
+                "file": {
+                    "type": "string",
+                    "description": "The script to load, resolved against this directory. Defaults to \"<id>.js\".",
+                    "minLength": 1
+                }
+            }
+        },
+        "mode": {
+            "description": "A calculator, named the way ?type= names it. The aliases and the upstream path names work too.",
+            "type": "string",
+            "anyOf": [
+                {
+                    "title": "calculator",
+                    "enum": ["graphing", "3d", "geometry", "matrix", "scientific"]
+                },
+                {
+                    "title": "alias",
+                    "enum": ["calculator", "calc", "graph", "three", "3", "geo", "matrices", "sci"]
+                }
+            ]
+        }
+    },
+    "examples": [
+        {
+            "extensions": {
+                "matrix": {
+                    "name": "Matrices",
+                    "description": "Add matrix support to the graphing calculator.",
+                    "supports": ["graphing", "3d"]
+                }
+            },
+            "defaultExtensions": ["matrix"]
+        }
+    ]
+}

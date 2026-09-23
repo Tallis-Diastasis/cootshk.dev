@@ -1,0 +1,12 @@
+# wrangler dev file
+
+name = "desmos-proxy-dev"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+no_bundle = true
+
+[assets]
+directory = "../"
+binding = "ASSETS"
+not_found_handling = "404-page"

@@ -1,0 +1,26 @@
+{
+    "$schema": "/desmos/extensions/extensions.schema.json",
+    "extensions": {
+        "matrix": {
+            "name": "Matrices",
+            "description": "Add matrix support to the graphing calculator.",
+            "supports": [
+                "graphing",
+                "3d"
+            ]
+        },
+        "desmodder": {
+            "name": "DesModder",
+            "description": "Loads the DesModder browser extension.",
+            "supports": [
+                "graphing",
+                "3d",
+                "geometry"
+            ]
+        }
+    },
+    "defaultExtensions": [
+        "matrix",
+        "desmodder"
+    ]
+}

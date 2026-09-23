@@ -1,0 +1,49 @@
+iframe, :root, body {
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+#ext-ui {
+    position: fixed;
+    right: 8px;
+    bottom: 8px;
+    z-index: 2;
+    font: 13px/1.4 system-ui, sans-serif;
+    color-scheme: light dark;
+}
+#ext-toggle {
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.85);
+    cursor: pointer;
+    opacity: 0.45;
+    transition: opacity 0.15s;
+}
+#ext-ui:hover #ext-toggle, #ext-panel:not([hidden]) + #ext-toggle {
+    opacity: 1;
+}
+#ext-panel {
+    position: absolute;
+    right: 0;
+    bottom: 34px;
+    min-width: 160px;
+    padding: 10px 12px;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    background: Canvas;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+}
+#ext-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 8px 0;
+}
+#ext-note {
+    margin: 8px 0 0;
+    opacity: 0.7;
+}
