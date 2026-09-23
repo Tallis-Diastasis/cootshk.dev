@@ -21,6 +21,16 @@ const HOST_SEGMENT = "/_h/"; // /_/desmos/_h/<other.desmos.com>/<path>
 // Hosts we are willing to proxy. Everything else is left untouched.
 const ALLOWED_HOST = /^(?:[a-z0-9-]+\.)*desmos\.com$/i;
 
+// Desmos ships hashed assets with Cache-Control: max-age=315360000 (ten years). Passing that
+// through means a browser pins whatever this Worker rewrote at the time and never asks again,
+// so any later fix to the rewriting silently fails to reach it. Bodies we rewrite therefore
+// get a capped lifetime and a version-tagged ETag; bump REWRITE_VERSION whenever the rewriting
+// logic changes and every cached copy revalidates into the new output. Untouched responses
+// (fonts, images) keep their original headers.
+const REWRITE_VERSION = "1";
+const REWRITTEN_MAX_AGE = 3600;
+const ETAG_TAG = "-dp" + REWRITE_VERSION;
+
 const REWRITABLE = /^(?:text\/html|text\/css|text\/javascript|application\/javascript|application\/x-javascript|application\/ecmascript|text\/ecmascript|application\/json|application\/manifest\+json|image\/svg\+xml|text\/plain)/i;
 const IS_JS = /^(?:text\/javascript|application\/javascript|application\/x-javascript|application\/ecmascript|text\/ecmascript)/i;
 
@@ -125,6 +135,7 @@ async function proxy(request, url, target) {
     if (STRIP_REQUEST_HEADERS.has(key)) continue;
     if (key === "origin") { headers.set("origin", target.origin); continue; }
     if (key === "referer") { headers.set("referer", unproxyUrl(value, url.origin) || target.origin + "/"); continue; }
+    if (key === "if-none-match") { headers.set("if-none-match", value.replace(/-dp\d+"/g, '"')); continue; }
     if (key === "accept-encoding") continue; // let the runtime negotiate
     headers.set(name, value);
   }
@@ -162,6 +173,10 @@ async function proxy(request, url, target) {
     return new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers: out });
   }
 
+  out.set("cache-control", capCacheControl(out.get("cache-control"), REWRITTEN_MAX_AGE));
+  const etag = out.get("etag");
+  if (etag) out.set("etag", etag.replace(/"\s*$/, ETAG_TAG + '"'));
+
   let body = await upstream.text();
   body = rewriteText(body, url.origin);
   if (/^text\/html/i.test(type)) body = rewriteHtml(body, url.origin);
@@ -169,6 +184,17 @@ async function proxy(request, url, target) {
   else if (IS_JS.test(type)) body = rewriteCssInJs(body);
 
   return new Response(body, { status: upstream.status, statusText: upstream.statusText, headers: out });
+}
+
+/** Lower an upstream max-age to `seconds`, and drop `immutable` so reloads can revalidate. */
+function capCacheControl(value, seconds) {
+  if (!value) return "public, max-age=" + seconds;
+  const cleaned = value.replace(/\s*,?\s*\bimmutable\b/gi, "");
+  if (/\b(?:no-store|no-cache)\b/i.test(cleaned)) return cleaned;
+  if (/\bmax-age\s*=/i.test(cleaned)) {
+    return cleaned.replace(/\bmax-age\s*=\s*(\d+)/gi, (m, n) => "max-age=" + Math.min(Number(n), seconds));
+  }
+  return cleaned + ", max-age=" + seconds;
 }
 
 /** Re-home a cookie onto our own origin and scope it to the proxy prefix. */
@@ -280,7 +306,16 @@ function buildBootstrap(origin) {
       hostSegment: HOST_SEGMENT,
       bootstrap: origin + BOOTSTRAP_PATH,
     };
-    src = "(" + clientBootstrap.toString() + ")(" + JSON.stringify(cfg) + ");\n";
+    // clientBootstrap is serialized with toString() and executed in the BROWSER, so it must
+    // survive any bundler that processed this file. esbuild (which wrangler runs with
+    // keepNames) rewrites nested declarations to `function f() {} __name(f, "f");`, and that
+    // helper only exists inside the Worker bundle - shipping it unshimmed throws
+    // "__name is not defined" on load. no_bundle = true in wrangler.toml avoids the rewrite
+    // at the source; this shim keeps the output correct if it is ever deployed through a
+    // bundling path anyway. The `var` hoists, so the self-reference is undefined, not a throw.
+    src =
+      "var __name = __name || function (t) { return t; };\n" +
+      "(" + clientBootstrap.toString() + ")(" + JSON.stringify(cfg) + ");\n";
     bootstrapCache.set(origin, src);
   }
   return src;
