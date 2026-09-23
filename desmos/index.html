@@ -1,7 +1,23 @@
 <!DOCTYPE html>
 <html lang="en_us">
 	<head>
-		<link rel="stylesheet" href="/desmos/styles.css">
+		<style>
+			iframe, :root, body {
+				width: 100vw;
+				height: 100vh;
+				margin: 0;
+				padding: 0;
+				border: none;
+			}
+		</style>
+		<link rel="icon" href="/_/desmos/assets/img/apps/graphing/favicon.ico" type="image/x-icon">
+		<meta property="og:site_name" content="Desmos">
+		<meta content="Desmos" property="og:title" />
+		<meta content="Graphing Calculator (modded)" property="og:description" />
+		<meta content="https://cootshk.dev/desmos" property="og:url" />
+		<meta content="https://i3.ytimg.com/vi/pX7nsPPWYy0/maxresdefault.jpg" property="og:image" />
+		<meta content="#187A3D" data-react-helmet="true" name="theme-color" />
+		<title>Desmos | Graphing Calculator (modded)</title>
 	</head>
 	<body>
 		<iframe id="desmos" src="https://cootshk.dev/_/desmos/calculator"></iframe>
@@ -11,6 +27,8 @@
 			const iframeDoc = iframe.contentDocument || iframeWin.document;
 			var script = iframeDoc.createElement("script");
 			script.append(`
+			// Matrix Userscript
+			// Shoutout to Tyrcnex for the original
 				console.log("Injecting...");
 				// ==UserScript==
 				// @name        matrices (beta)
