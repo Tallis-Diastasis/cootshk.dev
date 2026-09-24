@@ -23,11 +23,15 @@
 //
 // An extension is a plain object handed to extension(). Every hook is optional:
 //
+//   patches: [...]          parent - declarative rewrites of the Desmos bundle text
 //   html(doc, ctx)          parent - mutate the proxied page before it is written
 //   source(js, ctx) -> js   parent - rewrite the Desmos bundle text
 //   setup(ctx) -> data      parent - may fetch; the result is handed to main() and ready()
 //   main(data)              frame  - runs before the bundle does
 //   ready(Calc, data)       frame  - runs the moment Desmos assigns window.Calc
+//
+// `patches` runs before `source`, so an extension with both hands its own hook a bundle
+// that the patches have already been applied to. See the patches section below.
 //
 // main() and ready() are serialized with Function.prototype.toString and run inside the
 // frame, so they must not reference anything outside themselves - everything they need
@@ -47,7 +51,89 @@ const MANIFEST = new Map();
 
 function extension(def) {
   if (EXTENSIONS.has(def.id)) throw new Error(`desmos: duplicate extension id "${def.id}"`);
-  EXTENSIONS.set(def.id, def);
+  // Patches are a source() written declaratively, so make them one: everything downstream
+  // looks for def.source and needs to know nothing about either form.
+  EXTENSIONS.set(def.id, def.patches ? { ...def, source: patchSource(def) } : def);
+}
+
+// ---------------------------------------------------------------------------
+// patches
+// ---------------------------------------------------------------------------
+
+/**
+ * `patches` is the declarative half of source(): a list of
+ *
+ *   { match: /regex/, replace: "text", count?: number }
+ *
+ * applied to the bundle in order, each one's output feeding the next. `replace` is a
+ * String.prototype.replace replacement, so $1, $2, $<name> and $& put the pieces the match
+ * captured back into the bundle; it can also be a function, called with the arguments
+ * String.replace would pass it. A regex without /g replaces the first match, one with /g
+ * replaces every match, and a plain string matches literally.
+ *
+ * Minified names change with every Desmos build, so write the identifiers in a pattern as
+ * \i, which expands to exactly one of them:
+ *
+ *   patches: [{ match: /\i\.restrictedFunctions/, replace: "$&" }]
+ *
+ * A patch that matches nothing is an error rather than a no-op: the extension is dropped
+ * for the rest of the load and says so in the console, instead of silently half-applying
+ * itself to a build that has moved on. `count` tightens that to an exact number of
+ * matches, for a pattern that is only correct if it is as specific as it looks. It counts
+ * how many times the pattern appears, not how many of them get replaced - `count: 1` on a
+ * regex without /g is the usual "this had better be the only one" check.
+ */
+
+/** What `\i` expands to: one JavaScript identifier, minified or not. */
+const IDENTIFIER = "(?:[A-Za-z_$][\\w$]*)";
+
+/** `match` with `\i` expanded. Strings are literal, so they come back untouched. */
+function canonicalizeMatch(match) {
+  if (typeof match === "string") return match;
+  // One escape sequence at a time: that way the i in "\\i" - an escaped backslash, then a
+  // letter - is left alone, while the \i in "\\\i" is seen as an escape of its own.
+  const source = match.source.replace(/\\[\s\S]/g, (escape) => (escape === "\\i" ? IDENTIFIER : escape));
+  return source === match.source ? match : new RegExp(source, match.flags);
+}
+
+/** How many times `match` appears in `js`. */
+function countMatches(js, match) {
+  if (typeof match === "string") return match ? js.split(match).length - 1 : 0;
+  // Always a fresh regex: /g and /y carry a lastIndex between calls, and counting the
+  // matches must not move the one the replace is about to use.
+  const flags = match.flags.includes("g") ? match.flags : match.flags + "g";
+  return (js.match(new RegExp(match.source, flags)) || []).length;
+}
+
+/** Apply `patches` to the bundle text. Throws on the first one that did not take. */
+function applyPatches(patches, js, id) {
+  patches.forEach((patch, i) => {
+    const where = `desmos: "${id}" patch ${i + 1} of ${patches.length}`;
+    if (typeof patch.match !== "string" && !(patch.match instanceof RegExp))
+      throw new Error(`${where}: match must be a regex or a string`);
+    if (typeof patch.replace !== "string" && typeof patch.replace !== "function")
+      throw new Error(`${where}: replace must be a string or a function`);
+
+    const match = canonicalizeMatch(patch.match);
+    const found = countMatches(js, match);
+    const expected = patch.count;
+    if (expected === undefined ? found === 0 : found !== expected)
+      throw new Error(
+        `${where} (${match}) matched ${found} time(s)` + (expected === undefined ? "" : `, expected ${expected}`),
+      );
+
+    js = js.replace(match, patch.replace);
+  });
+  return js;
+}
+
+/** The source hook a patched extension gets: its patches, then its own source() if it has one. */
+function patchSource(def) {
+  const source = def.source;
+  return function (js, ctx) {
+    const patched = applyPatches(def.patches, js, def.id);
+    return source ? source.call(def, patched, ctx) : patched;
+  };
 }
 
 // ---------------------------------------------------------------------------

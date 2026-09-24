@@ -17,10 +17,16 @@
                 "3d",
                 "geometry"
             ]
+        },
+        "settings": {
+            "name": "Settings",
+            "description": "Adds a settings pane to the saved graphs list.",
+            "forceEnabled": true
         }
     },
     "defaultExtensions": [
         "matrix",
-        "desmodder"
+        "desmodder",
+        "settings"
     ]
 }

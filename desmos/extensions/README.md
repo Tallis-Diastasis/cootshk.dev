@@ -1,36 +1,31 @@
 # Extensions
 
-Every extension is one file in this directory plus one entry in `extensions.json`, which is
-maintained by hand. The page reads the manifest first and only fetches the scripts of the
-extensions that are actually turned on, so nothing has to be registered anywhere else.
+## Adding an extension
+- put a .js file in this folder
+- add it to extensions.json
 
-```jsonc
-{
-  "extensions": {
-    "matrix": {
-      "name": "Matrices",                          // shown in the settings panel
-      "description": "Add matrix support ...",     // its tooltip
-      "supports": ["graphing", "3d"],              // optional; every calculator when absent
-      "file": "matrix.js"                          // optional; "<id>.js" when absent
-    }
-  },
-  "defaultExtensions": ["matrix"]                  // on for anyone who has not said otherwise
-}
+## Patching the Desmos bundle
+Put a `patches` list in the object you hand to `extension()`. Each patch is
+`{ match, replace }`, applied to the bundle in order:
+
+```js
+extension({
+  id: "matrix",
+  patches: [
+    { match: /\i\.includes\(\i\)\|\|(?=\i\.restrictedFunctions)/g, replace: "", count: 1 },
+  ],
+});
 ```
 
-[`extensions.schema.json`](extensions.schema.json) is the whole format, field by field;
-`extensions.json` points at it, so an editor that understands JSON Schema will complete and
-check it as you type.
+- `\i` expands to one JavaScript identifier, `(?:[A-Za-z_$][\w$]*)`. Desmos' minified
+  names change with every build, so never write them out.
+- `replace` is a `String.replace` replacement: `$1`, `$2`, `$<name>` and `$&` put the
+  captured pieces back. A function works too. A `/g` match replaces every occurrence, a
+  plain one only the first.
+- A patch that matches nothing throws, and the extension is dropped for that load - it
+  will not silently half-apply itself to a build that moved on.
+- `count` asserts how many times the pattern appears. `count: 1` is the usual "this had
+  better be the only place" check.
 
-`supports` names calculators the way `?type=` does — `graphing`, `3d`, `geometry`, `matrix`,
-`scientific` — and takes their aliases and upstream paths (`calculator`) too.
-
-The script itself holds only behaviour: it calls `extension({ id: "matrix", ... })` with the
-hooks it wants, and the id has to match its key in the manifest. The hooks are documented at
-the top of [`../extensions.js`](../extensions.js).
-
-Which extensions run: `?ext=matrix,desmodder@v0.15.17` if it is in the URL (`?ext=none` for
-none at all), otherwise the checkboxes in the settings panel, which fall back to
-`defaultExtensions`.
-
-extension tutorial coming eventually™.
+`source(js, ctx)` is still there for anything this can't express, and runs after the
+patches.

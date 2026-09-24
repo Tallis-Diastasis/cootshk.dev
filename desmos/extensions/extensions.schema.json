@@ -29,6 +29,10 @@
         "extension": {
             "type": "object",
             "additionalProperties": false,
+            "required": [
+                "name",
+                "description"
+            ],
             "properties": {
                 "name": {
                     "type": "string",
@@ -41,15 +45,20 @@
                 },
                 "supports": {
                     "type": "array",
-                    "description": "The calculators this extension is for. Leave it out for all of them. An extension aimed at the wrong calculator is not just useless - DesModder, for one, waits forever on a bundle that calculator never loads - so it is skipped there, and its checkbox is disabled.",
+                    "description": "The supported calculators. All if omitted",
                     "items": { "$ref": "#/$defs/mode" },
                     "minItems": 1,
                     "uniqueItems": true
                 },
                 "file": {
                     "type": "string",
-                    "description": "The script to load, resolved against this directory. Defaults to \"<id>.js\".",
+                    "description": "Path of the script, if not <id>.js",
                     "minLength": 1
+                },
+                "forceEnabled":  {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "If the extension should be forced on."
                 }
             }
         },
