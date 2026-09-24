@@ -390,7 +390,6 @@ document.title = `Desmos | ${mode.title} (modded)`;
 loadManifest()
   .catch((error) => console.error("desmos: could not read the extension manifest", error))
   .then(() => {
-    extensionSettings(mode);
     return load(mode, graph);
   })
   .catch(fail);

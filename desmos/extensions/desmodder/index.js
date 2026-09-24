@@ -101,7 +101,7 @@ async function desmodderDownload(version) {
 
 // Name, description and default state are declared in ../../extensions.json, and so is the list
 // of calculators this is for: DesModder finds Desmos' bundle by name and only knows the four
-// desktop calculator bundles, while the matrix and scientific calculators ship
+// desktop calculator bundles, while the matrices and scientific calculators ship
 // calculator_matrix / calculator_basic instead, which its (untimed) poll would wait on
 // forever. Hence "supports" there leaves those two out.
 extension({

@@ -6,12 +6,13 @@
             "description": "Core patches used to load extensions.",
             "forceEnabled": true
         },
-        "matrix": {
+        "matrices": {
             "name": "Matrices",
             "description": "Add matrix support to the graphing calculator.",
             "supports": [
                 "graphing",
-                "3d"
+                "3d",
+                "geometry"
             ]
         },
         "desmodder": {

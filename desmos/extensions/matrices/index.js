@@ -1,5 +1,5 @@
 extension({
-  id: "matrix",
+  id: "matrices",
 
   patches: [
     {

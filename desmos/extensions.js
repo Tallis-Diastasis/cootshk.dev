@@ -5,16 +5,16 @@
 //
 //   {
 //     "extensions": {
-//       "matrix": {
+//       "matrices": {
 //         "name": "Matrices",                 // shown in the settings panel
 //         "description": "...",               // its tooltip
 //         "supports": ["graphing", "3d"],     // optional; every calculator when absent
-//         "css": true,                        // optional; load extensions/matrix/index.css
+//         "css": true,                        // optional; load extensions/matrices/index.css
 //         "file": "index.js",                 // optional; "index.js" when absent
 //         "forceEnabled": false               // optional; always on, and not togglable
 //       }
 //     },
-//     "defaultExtensions": ["matrix"]         // on for anyone who has not said otherwise
+//     "defaultExtensions": ["matrices"]         // on for anyone who has not said otherwise
 //   }
 //
 // extensions.schema.json has the format in full.
@@ -255,7 +255,7 @@ async function loadExtension(entry) {
 // which extensions load
 // ---------------------------------------------------------------------------
 
-/** `?ext=matrix,desmodder@v0.15.17` -> [{id, arg}], or null if there is no ?ext= at all. */
+/** `?ext=matrices,desmodder@v0.15.17` -> [{id, arg}], or null if there is no ?ext= at all. */
 function requestedExtensions() {
   const raw = new URLSearchParams(location.search).get("ext");
   if (raw === null) return null;
@@ -373,40 +373,4 @@ function uiConfig(mode, active) {
     overridden: requestedExtensions() !== null,
     extensions: extensionCatalog(mode, active),
   };
-}
-
-// ---------------------------------------------------------------------------
-// settings panel (parent page - a fallback for when the frame has no UI of its own)
-// ---------------------------------------------------------------------------
-
-/** Fills in the panel markup from index.html, from the manifest alone - no script needed. */
-function extensionSettings(mode) {
-  const overridden = requestedExtensions() !== null;
-  const stored = storedExtensions();
-  const list = $("#ext-list");
-  const reload = $("#ext-reload");
-
-  for (const entry of MANIFEST.values()) {
-    const supported = supportsMode(entry, mode);
-    const row = document.createElement("label");
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.checked = isEnabled(entry, stored) && supported;
-    box.disabled = overridden || entry.forced || !supported;
-    box.addEventListener("change", () => {
-      storeExtension(entry.id, box.checked);
-      reload.hidden = false;
-    });
-    row.append(box, " ", entry.name);
-    row.title = supported ? entry.description : `Not available on the ${mode.title.toLowerCase()}`;
-    if (!supported) row.style.opacity = "0.5";
-    list.appendChild(row);
-  }
-
-  $("#ext-note").hidden = !overridden;
-  $("#ext-toggle").addEventListener("click", () => {
-    const panel = $("#ext-panel");
-    panel.hidden = !panel.hidden;
-  });
-  reload.addEventListener("click", () => location.reload());
 }
