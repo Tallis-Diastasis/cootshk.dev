@@ -1,6 +1,6 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://cootshk.dev/desmos/extensions/extensions.schema.json",
+    "$id": "https://cootshk.dev/desmos/extensions.schema.json",
     "title": "Desmos extension manifest",
     "description": "A list of all of the extensions available",
     "type": "object",
@@ -52,8 +52,16 @@
                 },
                 "file": {
                     "type": "string",
-                    "description": "Path of the script, if not <id>.js",
+                    "description": "The script inside extensions/<id>/, if not index.js",
                     "minLength": 1
+                },
+                "css": {
+                    "description": "A stylesheet to put into the frame before the extension runs. true is the index.css beside its index.js; a string names another file in the same folder.",
+                    "default": false,
+                    "anyOf": [
+                        { "type": "boolean" },
+                        { "type": "string", "minLength": 1 }
+                    ]
                 },
                 "forceEnabled":  {
                     "type": "boolean",
@@ -83,7 +91,8 @@
                 "matrix": {
                     "name": "Matrices",
                     "description": "Add matrix support to the graphing calculator.",
-                    "supports": ["graphing", "3d"]
+                    "supports": ["graphing", "3d"],
+                    "css": true
                 }
             },
             "defaultExtensions": ["matrix"]

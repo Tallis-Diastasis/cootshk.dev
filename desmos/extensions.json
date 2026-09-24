@@ -1,6 +1,11 @@
 {
-    "$schema": "/desmos/extensions/extensions.schema.json",
+    "$schema": "/desmos/extensions.schema.json",
     "extensions": {
+        "core": {
+            "name": "Core",
+            "description": "Core patches used to load extensions.",
+            "forceEnabled": true
+        },
         "matrix": {
             "name": "Matrices",
             "description": "Add matrix support to the graphing calculator.",
@@ -21,11 +26,12 @@
         "settings": {
             "name": "Settings",
             "description": "Adds a settings pane to the saved graphs list.",
+            "css": true,
             "forceEnabled": true
         }
     },
     "defaultExtensions": [
-        "matrix",
+        "core",
         "desmodder",
         "settings"
     ]

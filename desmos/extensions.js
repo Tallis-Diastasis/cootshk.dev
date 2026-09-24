@@ -1,6 +1,7 @@
 // Extension registry for the proxied Desmos frame. desmos.js is the loader that runs these.
 //
-// Extensions are declared by hand in extensions/extensions.json:
+// An extension is a folder under extensions/ named after its id, holding an index.js and,
+// if it draws anything, an index.css. It is declared by hand in extensions.json:
 //
 //   {
 //     "extensions": {
@@ -8,16 +9,18 @@
 //         "name": "Matrices",                 // shown in the settings panel
 //         "description": "...",               // its tooltip
 //         "supports": ["graphing", "3d"],     // optional; every calculator when absent
-//         "file": "matrix.js"                 // optional; "<id>.js" when absent
+//         "css": true,                        // optional; load extensions/matrix/index.css
+//         "file": "index.js",                 // optional; "index.js" when absent
+//         "forceEnabled": false               // optional; always on, and not togglable
 //       }
 //     },
 //     "defaultExtensions": ["matrix"]         // on for anyone who has not said otherwise
 //   }
 //
-// extensions/extensions.schema.json has the format in full.
+// extensions.schema.json has the format in full.
 //
 // That manifest is everything the page knows before it loads anything: the settings panel is
-// drawn from it, and only the extensions that are actually on have their scripts fetched. So
+// drawn from it, and only the extensions that are actually on have their files fetched. So
 // the name, description, supported calculators and default state live there, and the script
 // itself holds nothing but the hooks.
 //
@@ -29,18 +32,23 @@
 //   setup(ctx) -> data      parent - may fetch; the result is handed to main() and ready()
 //   main(data)              frame  - runs before the bundle does
 //   ready(Calc, data)       frame  - runs the moment Desmos assigns window.Calc
+//   ui(root, data)          frame  - draws this extension's settings on its card in the
+//                                    Extensions tab; see ui.js for what it can draw with
+//
+// An index.css is not a hook: the loader fetches it alongside index.js and puts it into the
+// frame before any of the extension's own code runs.
 //
 // `patches` runs before `source`, so an extension with both hands its own hook a bundle
 // that the patches have already been applied to. See the patches section below.
 //
-// main() and ready() are serialized with Function.prototype.toString and run inside the
-// frame, so they must not reference anything outside themselves - everything they need
-// comes through `data`, which is whatever setup() returned.
+// main(), ready() and ui() are serialized with Function.prototype.toString and run inside
+// the frame, so they must not reference anything outside themselves - everything they need
+// comes through `data`, which is whatever setup() returned, and window.__desmosExt.
 //
 // `ownsBundle: true` means the extension executes the Desmos bundle itself and the loader
 // must not; DesModder fetches, patches and evals it.
 
-const MANIFEST_URL = "/desmos/extensions/extensions.json";
+const MANIFEST_URL = "/desmos/extensions.json";
 const EXT_DIR = "/desmos/extensions/";
 const EXT_STORAGE = "desmos-extensions";
 
@@ -140,6 +148,11 @@ function patchSource(def) {
 // the manifest
 // ---------------------------------------------------------------------------
 
+/** A file inside one extension's folder, as an absolute URL. */
+function extensionUrl(id, file) {
+  return new URL(`${id}/${file}`, new URL(EXT_DIR, location.origin)).toString();
+}
+
 /** Read extensions.json. Must finish before anything else here is called. */
 async function loadManifest() {
   // no-cache rather than the default: the manifest is hand-edited, and a stale copy means
@@ -158,8 +171,15 @@ async function loadManifest() {
       // The calculators it is for, named as ?type= is (aliases and upstream paths are taken
       // too). Null means all of them.
       supports: meta.supports || null,
-      src: new URL(meta.file || `${id}.js`, new URL(EXT_DIR, location.origin)).toString(),
+      src: extensionUrl(id, meta.file || "index.js"),
+      // An extension's own stylesheet, fetched with its script and put into the frame
+      // before it runs. `true` is the index.css beside its index.js; a string names
+      // another file in the same folder.
+      css: meta.css ? extensionUrl(id, meta.css === true ? "index.css" : meta.css) : null,
       default: defaults.has(id),
+      // Always on, ?ext= included: an extension that draws the settings UI is no use if it
+      // can be switched off from inside that UI, or left out of the URL that overrides it.
+      forced: !!meta.forceEnabled,
     });
   }
 
@@ -189,8 +209,34 @@ function loadScript(entry) {
   return scripts.get(entry.id);
 }
 
-/** The def for `entry`, fetching its script the first time; null if that doesn't work out. */
+// ...and one per stylesheet, for the same reason. The text is what gets handed to the
+// frame, so it is fetched rather than linked: the proxy bootstrap in there rewrites every
+// href it is given, and would send a <link> of ours off to desmos.com.
+const sheets = new Map();
+
+function loadSheet(entry) {
+  if (!entry.css) return Promise.resolve(null);
+  if (!sheets.has(entry.id)) {
+    sheets.set(
+      entry.id,
+      fetch(entry.css).then((res) => {
+        if (!res.ok) throw new Error(`${entry.css} -> ${res.status} ${res.statusText}`);
+        return res.text();
+      }),
+    );
+  }
+  return sheets.get(entry.id);
+}
+
+/** `entry`'s def and stylesheet, fetched the first time; null if the script doesn't work out. */
 async function loadExtension(entry) {
+  // Not Promise.all: a missing stylesheet leaves an extension unstyled, which is worth
+  // saying out loud but not worth dropping a working extension over. A missing script is.
+  const css = loadSheet(entry).catch((error) => {
+    console.error(`desmos: extension "${entry.id}" could not load its stylesheet`, error);
+    return null;
+  });
+
   try {
     await loadScript(entry);
   } catch (error) {
@@ -198,8 +244,11 @@ async function loadExtension(entry) {
     return null;
   }
   const def = EXTENSIONS.get(entry.id);
-  if (!def) console.warn(`desmos: ${entry.src} did not register an extension called "${entry.id}"`);
-  return def || null;
+  if (!def) {
+    console.warn(`desmos: ${entry.src} did not register an extension called "${entry.id}"`);
+    return null;
+  }
+  return { def, css: await css };
 }
 
 // ---------------------------------------------------------------------------
@@ -243,9 +292,15 @@ function supportsMode(entry, mode) {
   return !entry.supports || entry.supports.some((name) => canonicalMode(name) === mode.key);
 }
 
+/** Is `entry` on? forceEnabled beats everything; otherwise the stored choice, then default. */
+function isEnabled(entry, stored) {
+  return entry.forced || (stored[entry.id] ?? entry.default);
+}
+
 /**
  * The extensions to run, scripts and all. ?ext= wins when present; with no ?ext= at all,
- * fall back to the stored toggles over the manifest's defaults.
+ * fall back to the stored toggles over the manifest's defaults. Either way the forced ones
+ * come too.
  */
 async function enabledExtensions(mode) {
   const wanted = [];
@@ -257,10 +312,16 @@ async function enabledExtensions(mode) {
       if (entry) wanted.push({ entry, arg });
       else console.warn(`desmos: no extension named "${id}"`);
     }
+    // ...and the forced ones, which ?ext= does not get a say over. After the rest, in
+    // manifest order among themselves.
+    const asked = new Set(requested.map(({ id }) => id));
+    for (const entry of MANIFEST.values()) {
+      if (entry.forced && !asked.has(entry.id)) wanted.push({ entry, arg: null });
+    }
   } else {
     const stored = storedExtensions();
     for (const entry of MANIFEST.values()) {
-      if (stored[entry.id] ?? entry.default) wanted.push({ entry, arg: null });
+      if (isEnabled(entry, stored)) wanted.push({ entry, arg: null });
     }
   }
 
@@ -276,15 +337,46 @@ async function enabledExtensions(mode) {
   // extensions.json, whatever order the network hands the scripts back in.
   const active = await Promise.all(
     supported.map(async ({ entry, arg }) => {
-      const def = await loadExtension(entry);
-      return def && { def, meta: entry, arg, failed: false };
+      const loaded = await loadExtension(entry);
+      return loaded && { def: loaded.def, css: loaded.css, meta: entry, arg, failed: false };
     }),
   );
   return active.filter(Boolean);
 }
 
 // ---------------------------------------------------------------------------
-// settings panel (parent page - the frame belongs to Desmos' own chrome)
+// what the frame's UI is told
+// ---------------------------------------------------------------------------
+
+/**
+ * The manifest as the frame sees it: everything ui.js needs to draw the Extensions tab,
+ * and nothing that would not survive JSON. `active` is what this load actually started,
+ * which is how the UI knows a toggle has been flipped since.
+ */
+function extensionCatalog(mode, active) {
+  const running = new Set(active.map((entry) => entry.def.id));
+  return [...MANIFEST.values()].map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    description: entry.description,
+    supported: supportsMode(entry, mode),
+    forced: entry.forced,
+    default: entry.default,
+    active: running.has(entry.id),
+  }));
+}
+
+/** The config uiRuntime() is handed inside the frame. */
+function uiConfig(mode, active) {
+  return {
+    storage: EXT_STORAGE,
+    overridden: requestedExtensions() !== null,
+    extensions: extensionCatalog(mode, active),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// settings panel (parent page - a fallback for when the frame has no UI of its own)
 // ---------------------------------------------------------------------------
 
 /** Fills in the panel markup from index.html, from the manifest alone - no script needed. */
@@ -299,8 +391,8 @@ function extensionSettings(mode) {
     const row = document.createElement("label");
     const box = document.createElement("input");
     box.type = "checkbox";
-    box.checked = (stored[entry.id] ?? entry.default) && supported;
-    box.disabled = overridden || !supported;
+    box.checked = isEnabled(entry, stored) && supported;
+    box.disabled = overridden || entry.forced || !supported;
     box.addEventListener("change", () => {
       storeExtension(entry.id, box.checked);
       reload.hidden = false;

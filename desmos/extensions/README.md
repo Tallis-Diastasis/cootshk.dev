@@ -1,8 +1,21 @@
 # Extensions
 
+Each extension is a folder in here named after its id:
+
+```
+extensions/
+  matrix/
+    index.js      the hooks
+    index.css     optional; loaded into the frame before they run
+```
+
 ## Adding an extension
-- put a .js file in this folder
-- add it to extensions.json
+- make `<id>/index.js` and hand an object to `extension()`
+- add it to `../extensions.json` - nothing is loaded that isn't declared there
+- give it an `index.css` and set `"css": true` if it draws anything
+
+`"file"` overrides the script's name and `"css"` can name a stylesheet other than
+`index.css`; both are resolved inside the extension's own folder.
 
 ## Patching the Desmos bundle
 Put a `patches` list in the object you hand to `extension()`. Each patch is
@@ -29,3 +42,57 @@ extension({
 
 `source(js, ctx)` is still there for anything this can't express, and runs after the
 patches.
+
+## Drawing UI
+Desmos owns everything inside the frame, so an extension that wants to show
+something builds it there - stylesheet included. An `index.css` declared with
+`"css": true` is fetched with the script and put into the frame before any of the
+extension's code runs, so whatever it draws is styled the moment it appears.
+Write it against Desmos' own theme variables (`--dcg-custom-text-color`,
+`--dcg-custom-background-color`, `--dcg-custom-border-color`, `--dcg-accent-color`
+and friends, all with fallbacks) and it will follow the calculator rather than
+stand apart from it. `extensions/settings/index.css` is the worked example.
+
+A stylesheet cannot be `<link>`ed: the proxy rewrites every href handed to the
+frame, so the text is fetched out here and injected. That is also why a missing
+one is only logged - the extension still runs, just unstyled.
+
+The rest of the toolkit is on `window.__desmosExt.ui` (see `../ui.js`), which
+every frame-side hook can reach.
+
+The easy way in is a `ui` hook, which gets a container on the extension's own
+card in the Extensions tab (the saved-graphs modal, next to "Examples"):
+
+```js
+extension({
+  id: "matrix",
+  ui(root, data) {
+    const ui = window.__desmosExt.ui;
+    ui.el(root, null, ui.el("label", {}, ui.el("input", { type: "checkbox" }), " Auto-transpose"));
+  },
+});
+```
+
+`ui` is serialized and run in the frame like `main` and `ready`, so it must not
+reference anything outside itself; `data` is whatever `setup()` returned. Only a
+running extension has a panel - there is nothing to configure about one that is
+switched off.
+
+For anything that isn't a settings panel, patch Desmos to call
+`window.__desmosExt.ui.mount("<name>", el)` wherever you want the UI, and fill
+that slot from `main()`:
+
+```js
+window.__desmosExt.ui.slot("my-panel", (root) => {
+  root.textContent = "hello";
+  return () => {}; // optional teardown, run when Desmos unmounts the element
+});
+```
+
+The rest of `ui` - `el`, `css` (for styling that has to be computed), the
+extension list, the toggles, `dirty`/`reload` - is documented at the top of
+`../ui.js`.
+
+## Manifest flags
+`forceEnabled: true` pins an extension on: its toggle is locked, and `?ext=`
+cannot leave it out. It is for extensions that the UI itself depends on.

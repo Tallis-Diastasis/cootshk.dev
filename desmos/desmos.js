@@ -5,7 +5,8 @@
 // which to get in first. So the page is fetched here, its build script is held back, what
 // is left is written into the frame, the extensions run, and only then does Desmos start.
 //
-// See extensions.js for the hooks an extension can implement.
+// See extensions.js for the hooks an extension can implement, and ui.js for what they draw
+// with.
 
 const PROXY = "/_/desmos";
 
@@ -339,15 +340,23 @@ async function load(mode, graph) {
     bundle,
   };
   inject(doc, `${asExpression(preamble, "preamble")}(${JSON.stringify(config)});`);
+  // Before any extension runs: main() and ui() are where an extension draws, and both of
+  // them reach for __desmosExt.ui.
+  inject(doc, `${asExpression(uiRuntime, "uiRuntime")}(${JSON.stringify(uiConfig(mode, active))});`);
 
   for (const entry of active) {
-    if (entry.failed || (!entry.def.main && !entry.def.ready)) continue;
+    if (entry.failed) continue;
     const data = JSON.stringify(entry.data ?? null);
+    const id = JSON.stringify(entry.def.id);
     let code = "";
+    // First, so that whatever the hooks below draw is styled the moment it appears.
+    if (entry.css) code += `__desmosExt.ui.css(${id}, ${JSON.stringify(entry.css)});\n`;
+    if (entry.def.ui) code += `__desmosExt.ui.panel(${id}, ${asExpression(entry.def.ui, "ui")}, ${data});\n`;
     if (entry.def.main) code += `${asExpression(entry.def.main, "main")}(${data});\n`;
     if (entry.def.ready) code += `__desmosExt.onCalc(${asExpression(entry.def.ready, "ready")}, ${data});\n`;
+    if (!code) continue;
     // One <script> each, so an extension that throws does not stop the next one.
-    inject(doc, `try {\n${code}} catch (error) {\n  console.error("desmos: extension " + ${JSON.stringify(entry.def.id)} + " failed", error);\n}`);
+    inject(doc, `try {\n${code}} catch (error) {\n  console.error("desmos: extension " + ${id} + " failed", error);\n}`);
   }
 
   const src = bundle || (build.length ? build[0].getAttribute("src") : null);
