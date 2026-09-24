@@ -23,6 +23,10 @@
                 "geometry"
             ]
         },
+        "oneko": {
+            "name": "oneko",
+            "description": "cat follow mouse (real)"
+        },
         "settings": {
             "name": "Settings",
             "description": "Adds a settings pane to the saved graphs list.",

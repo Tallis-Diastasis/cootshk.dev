@@ -7,7 +7,7 @@ extension({
             count: 1
         }
     ],
-    start() {
+    ready() {
         console.log("Started extensions!")
     }
 })
