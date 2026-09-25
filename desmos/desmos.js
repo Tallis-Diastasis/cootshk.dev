@@ -12,35 +12,42 @@
 // Desmos and the loader share one window, which is the point - see extensions.js for the
 // hooks an extension can implement, and ui.js for what they draw with.
 const local = {
-  fetch: window.fetch.bind(window),
+    fetch: window.fetch.bind(window),
 
-  // Both HTMLScriptElement.prototype.src and Element.prototype.setAttribute are patched, so
-  // this is the only way left to point a <script> or <link> at one of our own files:
-  //   local.setAttribute.call(script, "src", url)
-  setAttribute: Element.prototype.setAttribute,
+    // Both HTMLScriptElement.prototype.src and Element.prototype.setAttribute are patched, so
+    // this is the only way left to point a <script> or <link> at one of our own files:
+    //   local.setAttribute.call(script, "src", url)
+    setAttribute: Element.prototype.setAttribute
 };
-
 
 const PROXY = "/_/desmos";
 
 // ?type=... -> where the app lives upstream. `key` is the name extensions.json uses.
 const MODES = {
-  graphing: { key: "graphing", path: "calculator", title: "Graphing Calculator" },
-  "3d": { key: "3d", path: "3d", title: "3D Calculator" },
-  geometry: { key: "geometry", path: "geometry", title: "Geometry" },
-  matrix: { key: "matrix", path: "matrix", title: "Matrix Calculator" },
-  scientific: { key: "scientific", path: "scientific", title: "Scientific Calculator" },
+    graphing: {
+        key: "graphing",
+        path: "calculator",
+        title: "Graphing Calculator"
+    },
+    "3d": { key: "3d", path: "3d", title: "3D Calculator" },
+    geometry: { key: "geometry", path: "geometry", title: "Geometry" },
+    matrix: { key: "matrix", path: "matrix", title: "Matrix Calculator" },
+    scientific: {
+        key: "scientific",
+        path: "scientific",
+        title: "Scientific Calculator"
+    }
 };
 
 const ALIASES = {
-  calculator: "graphing",
-  calc: "graphing",
-  graph: "graphing",
-  three: "3d",
-  "3": "3d",
-  geo: "geometry",
-  matrices: "matrix",
-  sci: "scientific",
+    calculator: "graphing",
+    calc: "graphing",
+    graph: "graphing",
+    three: "3d",
+    3: "3d",
+    geo: "geometry",
+    matrices: "matrix",
+    sci: "scientific"
 };
 
 const DEFAULT_MODE = "graphing";
@@ -57,15 +64,20 @@ const BUNDLE_TIMEOUT = 10000;
 
 /** Any of a mode's names - a ?type= value, an alias, or its upstream path - as a MODES key. */
 function canonicalMode(name) {
-  const raw = String(name ?? "").trim().toLowerCase();
-  const key = ALIASES[raw] || raw;
-  if (MODES[key]) return key;
-  return Object.keys(MODES).find((k) => MODES[k].path === raw) || null;
+    const raw = String(name ?? "")
+        .trim()
+        .toLowerCase();
+    const key = ALIASES[raw] || raw;
+    if (MODES[key]) return key;
+    return Object.keys(MODES).find((k) => MODES[k].path === raw) || null;
 }
 
 /** The mode named by ?type=, falling back to the graphing calculator. */
 function currentMode() {
-  return MODES[canonicalMode(new URLSearchParams(location.search).get("type")) || DEFAULT_MODE];
+    return MODES[
+        canonicalMode(new URLSearchParams(location.search).get("type")) ||
+            DEFAULT_MODE
+    ];
 }
 
 /**
@@ -74,17 +86,19 @@ function currentMode() {
  * is what lets the address bar stay on /desmos.
  */
 function currentGraph() {
-  const raw = location.hash.replace(/^#\/?/, "");
-  try {
-    return decodeURIComponent(raw).trim();
-  } catch (_) {
-    return raw.trim(); // stray % - take it literally rather than throwing the load away
-  }
+    const raw = location.hash.replace(/^#\/?/, "");
+    try {
+        return decodeURIComponent(raw).trim();
+    } catch (_) {
+        return raw.trim(); // stray % - take it literally rather than throwing the load away
+    }
 }
 
 function sourceUrl(mode, graph) {
-  const path = graph ? PROXY + "/" + mode.path + "/" + encodeURIComponent(graph) : PROXY + "/" + mode.path;
-  return new URL(path, location.origin).toString();
+    const path = graph
+        ? PROXY + "/" + mode.path + "/" + encodeURIComponent(graph)
+        : PROXY + "/" + mode.path;
+    return new URL(path, location.origin).toString();
 }
 
 // Object URLs belonging to the current load, handed out through ctx.blob() and released
@@ -92,14 +106,14 @@ function sourceUrl(mode, graph) {
 let blobs = [];
 
 function makeBlob(text, type) {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  blobs.push(url);
-  return url;
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    blobs.push(url);
+    return url;
 }
 
 function releaseBlobs() {
-  for (const url of blobs) URL.revokeObjectURL(url);
-  blobs = [];
+    for (const url of blobs) URL.revokeObjectURL(url);
+    blobs = [];
 }
 
 // ---------------------------------------------------------------------------
@@ -111,75 +125,80 @@ function releaseBlobs() {
  * before the bundle runs. `bundle` is the patched copy of it, if an extension rewrote it.
  */
 function patchWindow(bundle, buildPath) {
-  const ext = (window.__desmosExt = window.__desmosExt || {});
+    const ext = (window.__desmosExt = window.__desmosExt || {});
 
-  // Our own escape hatch from the proxy's rewriting, for hooks that run after the swap.
-  ext.fetch = local.fetch;
+    // Our own escape hatch from the proxy's rewriting, for hooks that run after the swap.
+    ext.fetch = local.fetch;
 
-  // The proxy bootstrap wraps history on the instance so that every URL Desmos builds out of
-  // location keeps the prefix. In this document location is already ours, so that would turn
-  // /desmos into /_/desmos/desmos. History.prototype still holds the unwrapped methods.
-  for (const name of ["pushState", "replaceState"]) {
-    const original = History.prototype[name];
-    history[name] = function (state, title, url) {
-      const result =
-        arguments.length < 3 || url === null || url === undefined
-          ? original.call(history, state, title)
-          : original.call(history, state, title, url);
-      // Saving or opening a graph writes the ID into the hash (extensions/core patches
-      // getURL to build it that way). Keep up, so the hashchange handler below does not read
-      // it back as a graph it has to go and load.
-      graph = currentGraph();
-      return result;
-    };
-  }
-
-  // Extensions that rewrite the bundle hand us a blob of the patched source. DesModder
-  // re-fetches the bundle by URL, so point that fetch at the patched copy instead. Matching
-  // on the path alone: it appends a "?" to the URL to dodge its own blocking rules.
-  if (bundle && buildPath) {
-    const fetched = window.fetch;
-    window.fetch = function (input, init) {
-      try {
-        const url = String(input && input.url !== undefined ? input.url : input);
-        if (new URL(url, document.baseURI).pathname === buildPath) {
-          return fetched.call(this, bundle, init);
-        }
-      } catch (_) {}
-      return fetched.call(this, input, init);
-    };
-  }
-
-  let calc;
-  let hooks = [];
-
-  function run(fn, data) {
-    try {
-      fn(calc, data);
-    } catch (error) {
-      console.error("desmos: extension ready hook failed", error);
+    // The proxy bootstrap wraps history on the instance so that every URL Desmos builds out of
+    // location keeps the prefix. In this document location is already ours, so that would turn
+    // /desmos into /_/desmos/desmos. History.prototype still holds the unwrapped methods.
+    for (const name of ["pushState", "replaceState"]) {
+        const original = History.prototype[name];
+        history[name] = function (state, title, url) {
+            const result =
+                arguments.length < 3 || url === null || url === undefined
+                    ? original.call(history, state, title)
+                    : original.call(history, state, title, url);
+            // Saving or opening a graph writes the ID into the hash (extensions/core patches
+            // getURL to build it that way). Keep up, so the hashchange handler below does not read
+            // it back as a graph it has to go and load.
+            graph = currentGraph();
+            return result;
+        };
     }
-  }
 
-  // window.Calc is a plain assignment inside the bundle, so a setter beats polling for it.
-  Object.defineProperty(window, "Calc", {
-    configurable: true,
-    enumerable: true,
-    get: () => calc,
-    set: (value) => {
-      calc = value;
-      const pending = hooks;
-      hooks = null;
-      // The assignment happens in the middle of Desmos' own startup, so get out of its stack
-      // before running anything: a slow hook here stalls initialization.
-      if (pending) pending.forEach((hook) => queueMicrotask(() => run(hook.fn, hook.data)));
-    },
-  });
+    // Extensions that rewrite the bundle hand us a blob of the patched source. DesModder
+    // re-fetches the bundle by URL, so point that fetch at the patched copy instead. Matching
+    // on the path alone: it appends a "?" to the URL to dodge its own blocking rules.
+    if (bundle && buildPath) {
+        const fetched = window.fetch;
+        window.fetch = function (input, init) {
+            try {
+                const url = String(
+                    input && input.url !== undefined ? input.url : input
+                );
+                if (new URL(url, document.baseURI).pathname === buildPath) {
+                    return fetched.call(this, bundle, init);
+                }
+            } catch (_) {}
+            return fetched.call(this, input, init);
+        };
+    }
 
-  ext.onCalc = (fn, data) => {
-    if (hooks) hooks.push({ fn, data });
-    else run(fn, data);
-  };
+    let calc;
+    let hooks = [];
+
+    function run(fn, data) {
+        try {
+            fn(calc, data);
+        } catch (error) {
+            console.error("desmos: extension ready hook failed", error);
+        }
+    }
+
+    // window.Calc is a plain assignment inside the bundle, so a setter beats polling for it.
+    Object.defineProperty(window, "Calc", {
+        configurable: true,
+        enumerable: true,
+        get: () => calc,
+        set: (value) => {
+            calc = value;
+            const pending = hooks;
+            hooks = null;
+            // The assignment happens in the middle of Desmos' own startup, so get out of its stack
+            // before running anything: a slow hook here stalls initialization.
+            if (pending)
+                pending.forEach((hook) =>
+                    queueMicrotask(() => run(hook.fn, hook.data))
+                );
+        }
+    });
+
+    ext.onCalc = (fn, data) => {
+        if (hooks) hooks.push({ fn, data });
+        else run(fn, data);
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -188,64 +207,69 @@ function patchWindow(bundle, buildPath) {
 
 /** Resolves once `doc` has finished parsing (and so has run its inline/blocking scripts). */
 function parsed(doc) {
-  if (doc.readyState !== "loading") return Promise.resolve();
-  return new Promise((resolve) => doc.addEventListener("DOMContentLoaded", resolve, { once: true }));
+    if (doc.readyState !== "loading") return Promise.resolve();
+    return new Promise((resolve) =>
+        doc.addEventListener("DOMContentLoaded", resolve, { once: true })
+    );
 }
 
 /** Replace this document with `html`, resolving once the new one has been parsed. */
 async function swap(html) {
-  // document.open() erases every event listener on the window and on every node in the
-  // document, so nothing registered before this point survives it.
-  document.open();
-  document.write(html);
-  document.close();
-  listen();
-  await parsed(document);
+    // document.open() erases every event listener on the window and on every node in the
+    // document, so nothing registered before this point survives it.
+    document.open();
+    document.write(html);
+    document.close();
+    listen();
+    await parsed(document);
 }
 
 /** Run one hook. An extension that throws is dropped for the rest of this load. */
 async function guard(entry, fn) {
-  if (entry.failed) return undefined;
-  try {
-    return await fn();
-  } catch (error) {
-    entry.failed = true;
-    console.error(`desmos: extension "${entry.def.id}" failed`, error);
-    return undefined;
-  }
+    if (entry.failed) return undefined;
+    try {
+        return await fn();
+    } catch (error) {
+        entry.failed = true;
+        console.error(`desmos: extension "${entry.def.id}" failed`, error);
+        return undefined;
+    }
 }
 
 /** Apply the source hooks to Desmos' bundle; null when nothing wanted to patch it. */
 async function patchBundle(buildUrl, active, context) {
-  const patchers = active.filter((entry) => entry.def.source);
-  if (!buildUrl || !patchers.length) return null;
+    const patchers = active.filter((entry) => entry.def.source);
+    if (!buildUrl || !patchers.length) return null;
 
-  const res = await fetch(buildUrl);
-  if (!res.ok) throw new Error(`${buildUrl} -> ${res.status} ${res.statusText}`);
+    const res = await fetch(buildUrl);
+    if (!res.ok)
+        throw new Error(`${buildUrl} -> ${res.status} ${res.statusText}`);
 
-  // Desmos builds its worker from a string inside this file, so one text pass covers both.
-  let text = await res.text();
-  for (const entry of patchers) {
-    const next = await guard(entry, () => entry.def.source(text, context(entry)));
-    if (typeof next === "string") text = next;
-  }
-  return makeBlob(text, "text/javascript");
+    // Desmos builds its worker from a string inside this file, so one text pass covers both.
+    let text = await res.text();
+    for (const entry of patchers) {
+        const next = await guard(entry, () =>
+            entry.def.source(text, context(entry))
+        );
+        if (typeof next === "string") text = next;
+    }
+    return makeBlob(text, "text/javascript");
 }
 
 /** Start Desmos: `src` is our patched blob, or the original URL when nothing patched it. */
 function runBundle(src, original) {
-  const script = document.createElement("script");
-  if (original) {
-    for (const { name, value } of original.attributes) {
-      if (name === "src" || name === "type") continue;
-      script.setAttribute(name, value);
+    const script = document.createElement("script");
+    if (original) {
+        for (const { name, value } of original.attributes) {
+            if (name === "src" || name === "type") continue;
+            script.setAttribute(name, value);
+        }
     }
-  }
-  script.async = false; // dynamically inserted scripts would otherwise run out of order
-  // Either a blob: URL or a path already under /_/ , both of which the proxy's patched src
-  // setter leaves alone.
-  script.src = src;
-  (document.head || document.documentElement).appendChild(script);
+    script.async = false; // dynamically inserted scripts would otherwise run out of order
+    // Either a blob: URL or a path already under /_/ , both of which the proxy's patched src
+    // setter leaves alone.
+    script.src = src;
+    (document.head || document.documentElement).appendChild(script);
 }
 
 // Which load is current: a hook that outlives its own load must not act on the next one.
@@ -257,92 +281,117 @@ let loads = 0;
  * page, start Desmos ourselves if nothing else has.
  */
 function watchdog(src, original, id, generation) {
-  setTimeout(() => {
-    if (generation !== loads) return; // superseded
-    if (window.Calc !== undefined) return;
-    console.warn(`desmos: "${id}" never started Desmos; starting it directly`);
-    runBundle(src, original);
-  }, BUNDLE_TIMEOUT);
+    setTimeout(() => {
+        if (generation !== loads) return; // superseded
+        if (window.Calc !== undefined) return;
+        console.warn(
+            `desmos: "${id}" never started Desmos; starting it directly`
+        );
+        runBundle(src, original);
+    }, BUNDLE_TIMEOUT);
 }
 
 async function load(mode, graph) {
-  const generation = ++loads;
-  releaseBlobs();
+    const generation = ++loads;
+    releaseBlobs();
 
-  const url = sourceUrl(mode, graph);
-  const active = await enabledExtensions(mode);
-  const context = (entry) => ({ mode, graph, url, arg: entry.arg, blob: makeBlob, fetch: local.fetch });
-
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url} -> ${res.status} ${res.statusText}`);
-  const source = new DOMParser().parseFromString(await res.text(), "text/html");
-
-  // Hold Desmos' bundle back without taking the tag out of the document.
-  const build = [...source.querySelectorAll("script[src]")].filter((s) => BUILD_SCRIPT.test(s.getAttribute("src")));
-  for (const script of build) script.setAttribute("type", HELD_TYPE);
-
-  // This document's own URL is /desmos, so relative URLs (and the proxy bootstrap, which
-  // resolves against document.baseURI) need the one it was fetched from spelled out.
-  const base = source.createElement("base");
-  base.setAttribute("href", url);
-  source.head.prepend(base);
-
-  for (const entry of active) {
-    if (entry.def.html) await guard(entry, () => entry.def.html(source, context(entry)));
-  }
-
-  const buildUrl = build.length ? new URL(build[0].getAttribute("src"), url).toString() : null;
-  const bundle = await patchBundle(buildUrl, active, context);
-
-  // setup() may go to the network; let them all run at once.
-  await Promise.all(
-    active.map((entry) =>
-      entry.def.setup ? guard(entry, async () => { entry.data = await entry.def.setup(context(entry)); }) : null,
-    ),
-  );
-
-  await swap("<!DOCTYPE html>" + source.documentElement.outerHTML);
-  title(mode);
-
-  patchWindow(bundle, buildUrl ? new URL(buildUrl).pathname : null);
-  // Before any extension runs: ui() and main() are where an extension draws, and both of
-  // them reach for __desmosExt.ui.
-  uiRuntime(uiConfig(mode, active));
-
-  for (const entry of active) {
-    // One guard() each, so an extension that throws does not stop the next one.
-    await guard(entry, () => {
-      const id = entry.def.id;
-      // First, so that whatever the hooks below draw is styled the moment it appears.
-      if (entry.css) __desmosExt.ui.css(id, entry.css);
-      if (entry.def.ui) __desmosExt.ui.panel(id, entry.def.ui, entry.data);
-      if (entry.def.main) entry.def.main(entry.data);
-      if (entry.def.ready) __desmosExt.onCalc(entry.def.ready, entry.data);
+    const url = sourceUrl(mode, graph);
+    const active = await enabledExtensions(mode);
+    const context = (entry) => ({
+        mode,
+        graph,
+        url,
+        arg: entry.arg,
+        blob: makeBlob,
+        fetch: local.fetch
     });
-  }
 
-  const src = bundle || (build.length ? build[0].getAttribute("src") : null);
-  if (!src) {
-    console.warn(`desmos: no build script in ${url}; the page shape must have changed`);
-    return;
-  }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${url} -> ${res.status} ${res.statusText}`);
+    const source = new DOMParser().parseFromString(
+        await res.text(),
+        "text/html"
+    );
 
-  const owner = active.find((entry) => !entry.failed && entry.def.ownsBundle);
-  if (owner) watchdog(src, build[0], owner.def.id, generation);
-  else runBundle(src, build[0]);
+    // Hold Desmos' bundle back without taking the tag out of the document.
+    const build = [...source.querySelectorAll("script[src]")].filter((s) =>
+        BUILD_SCRIPT.test(s.getAttribute("src"))
+    );
+    for (const script of build) script.setAttribute("type", HELD_TYPE);
+
+    // This document's own URL is /desmos, so relative URLs (and the proxy bootstrap, which
+    // resolves against document.baseURI) need the one it was fetched from spelled out.
+    const base = source.createElement("base");
+    base.setAttribute("href", url);
+    source.head.prepend(base);
+
+    for (const entry of active) {
+        if (entry.def.html)
+            await guard(entry, () => entry.def.html(source, context(entry)));
+    }
+
+    const buildUrl = build.length
+        ? new URL(build[0].getAttribute("src"), url).toString()
+        : null;
+    const bundle = await patchBundle(buildUrl, active, context);
+
+    // setup() may go to the network; let them all run at once.
+    await Promise.all(
+        active.map((entry) =>
+            entry.def.setup
+                ? guard(entry, async () => {
+                      entry.data = await entry.def.setup(context(entry));
+                  })
+                : null
+        )
+    );
+
+    await swap("<!DOCTYPE html>" + source.documentElement.outerHTML);
+    title(mode);
+
+    patchWindow(bundle, buildUrl ? new URL(buildUrl).pathname : null);
+    // Before any extension runs: ui() and main() are where an extension draws, and both of
+    // them reach for __desmosExt.ui.
+    uiRuntime(uiConfig(mode, active));
+
+    for (const entry of active) {
+        // One guard() each, so an extension that throws does not stop the next one.
+        await guard(entry, () => {
+            const id = entry.def.id;
+            // First, so that whatever the hooks below draw is styled the moment it appears.
+            if (entry.css) __desmosExt.ui.css(id, entry.css);
+            if (entry.def.ui)
+                __desmosExt.ui.panel(id, entry.def.ui, entry.data);
+            if (entry.def.main) entry.def.main(entry.data);
+            if (entry.def.ready)
+                __desmosExt.onCalc(entry.def.ready, entry.data);
+        });
+    }
+
+    const src = bundle || (build.length ? build[0].getAttribute("src") : null);
+    if (!src) {
+        console.warn(
+            `desmos: no build script in ${url}; the page shape must have changed`
+        );
+        return;
+    }
+
+    const owner = active.find((entry) => !entry.failed && entry.def.ownsBundle);
+    if (owner) watchdog(src, build[0], owner.def.id, generation);
+    else runBundle(src, build[0]);
 }
 
 function fail(error) {
-  console.error("desmos: failed to load", error);
-  document.open();
-  document.write(
-    '<!DOCTYPE html><meta charset="utf-8"><body style="font:16px/1.5 system-ui;padding:2rem">' +
-      "<h1>Couldn't load Desmos</h1><pre></pre>",
-  );
-  document.close();
-  listen();
-  const pre = document.querySelector("pre");
-  if (pre) pre.textContent = String(error);
+    console.error("desmos: failed to load", error);
+    document.open();
+    document.write(
+        '<!DOCTYPE html><meta charset="utf-8"><body style="font:16px/1.5 system-ui;padding:2rem">' +
+            "<h1>Couldn't load Desmos</h1><pre></pre>"
+    );
+    document.close();
+    listen();
+    const pre = document.querySelector("pre");
+    if (pre) pre.textContent = String(error);
 }
 
 // ---------------------------------------------------------------------------
@@ -354,28 +403,28 @@ let graph = currentGraph();
 
 /** Ours rather than Desmos' - which takes the title back over as soon as it has a graph. */
 function title(of) {
-  document.title = `Desmos | ${of.title} (modded)`;
+    document.title = `Desmos | ${of.title} (modded)`;
 }
 
 // Editing the fragment by hand (or following a link to another graph) swaps the graph out.
 function onHashChange() {
-  const next = currentGraph();
-  if (next === graph) return;
-  // Desmos' timers, workers, blob URLs and globals live in this window, and once it has
-  // started there is no way to be rid of them: a real navigation is the only clean slate.
-  // The hash survives it, so the graph below is the one that comes back up.
-  if (window.Calc !== undefined) {
-    location.reload();
-    return;
-  }
-  graph = next;
-  load(mode, graph).catch(fail);
+    const next = currentGraph();
+    if (next === graph) return;
+    // Desmos' timers, workers, blob URLs and globals live in this window, and once it has
+    // started there is no way to be rid of them: a real navigation is the only clean slate.
+    // The hash survives it, so the graph below is the one that comes back up.
+    if (window.Calc !== undefined) {
+        location.reload();
+        return;
+    }
+    graph = next;
+    load(mode, graph).catch(fail);
 }
 
 /** Re-registered after every document.open(), which erases the lot. */
 function listen() {
-  // A named handler, so that registering it twice is the no-op it looks like.
-  addEventListener("hashchange", onHashChange);
+    // A named handler, so that registering it twice is the no-op it looks like.
+    addEventListener("hashchange", onHashChange);
 }
 
 title(mode);
@@ -384,9 +433,10 @@ listen();
 // Nothing can be drawn or loaded until the manifest says what exists. A manifest that will
 // not read is not worth losing the calculator over: log it and carry on with no extensions.
 loadManifest()
-  .catch((error) => console.error("desmos: could not read the extension manifest", error))
-  .then(() => {
-    return load(mode, graph);
-  })
-  .catch(fail);
-
+    .catch((error) =>
+        console.error("desmos: could not read the extension manifest", error)
+    )
+    .then(() => {
+        return load(mode, graph);
+    })
+    .catch(fail);

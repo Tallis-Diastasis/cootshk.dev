@@ -50,231 +50,252 @@
  *                                        default, active}] }
  */
 function uiRuntime(config) {
-  var g = window;
-  var ext = (g.__desmosExt = g.__desmosExt || {});
+    var g = window;
+    var ext = (g.__desmosExt = g.__desmosExt || {});
 
-  var catalog = config.extensions || [];
-  var byId = {};
-  catalog.forEach(function (entry) {
-    byId[entry.id] = entry;
-  });
-
-  // ---------------------------------------------------------------------------
-  // building blocks
-  // ---------------------------------------------------------------------------
-
-  function append(node, child) {
-    if (child === null || child === undefined || child === false) return;
-    if (Array.isArray(child)) return child.forEach(function (one) { append(node, one); });
-    node.appendChild(typeof child === "object" ? child : document.createTextNode(String(child)));
-  }
-
-  function el(tag, props) {
-    // An element rather than a tag name fills what is already there: a container Desmos
-    // handed us gets built up the same way one of ours does, nulls skipped and all.
-    var node = typeof tag === "string" ? document.createElement(tag) : tag;
-    var settings = props || {};
-    Object.keys(settings).forEach(function (key) {
-      var value = settings[key];
-      if (value === null || value === undefined) return;
-      if (key === "class") node.className = value;
-      else if (key === "text") node.textContent = value;
-      else if (key === "children") append(node, value);
-      // onclick, oninput, ... - a listener rather than an inline-handler attribute, so that
-      // several can be attached to the same node and none of them are strings.
-      else if (key.slice(0, 2) === "on" && typeof value === "function")
-        node.addEventListener(key.slice(2), value);
-      // checked / disabled / hidden only mean anything as properties; the rest are markup.
-      else if (typeof value === "boolean") node[key] = value;
-      else node.setAttribute(key, value);
+    var catalog = config.extensions || [];
+    var byId = {};
+    catalog.forEach(function (entry) {
+        byId[entry.id] = entry;
     });
-    for (var i = 2; i < arguments.length; i++) append(node, arguments[i]);
-    return node;
-  }
 
-  var sheets = {};
+    // ---------------------------------------------------------------------------
+    // building blocks
+    // ---------------------------------------------------------------------------
 
-  function css(key, text) {
-    if (sheets[key]) return;
-    sheets[key] = true;
-    var style = document.createElement("style");
-    style.setAttribute("data-desmos-ext", key);
-    style.textContent = text;
-    (document.head || document.documentElement).appendChild(style);
-  }
-
-  // ---------------------------------------------------------------------------
-  // which extensions are on
-  // ---------------------------------------------------------------------------
-
-  function stored() {
-    try {
-      return JSON.parse(g.localStorage.getItem(config.storage)) || {};
-    } catch (e) {
-      return {};
+    function append(node, child) {
+        if (child === null || child === undefined || child === false) return;
+        if (Array.isArray(child))
+            return child.forEach(function (one) {
+                append(node, one);
+            });
+        node.appendChild(
+            typeof child === "object"
+                ? child
+                : document.createTextNode(String(child))
+        );
     }
-  }
 
-  /** Whether `id` is meant to be running - what its toggle shows, not what is loaded. */
-  function enabled(id) {
-    var entry = byId[id];
-    if (!entry || !entry.supported) return false;
-    if (entry.forced) return true;
-    // ?ext= is the whole answer while it is there, so the toggles report the load itself.
-    if (config.overridden) return entry.active;
-    var choice = stored()[id];
-    return choice === undefined ? !!entry["default"] : !!choice;
-  }
-
-  function locked(id) {
-    var entry = byId[id];
-    return !entry || !entry.supported || entry.forced || !!config.overridden;
-  }
-
-  var listeners = [];
-
-  function onDirty(fn) {
-    listeners.push(fn);
-    return function () {
-      listeners = listeners.filter(function (one) {
-        return one !== fn;
-      });
-    };
-  }
-
-  function setEnabled(id, on) {
-    if (locked(id)) return false;
-    var choices = stored();
-    choices[id] = !!on;
-    try {
-      g.localStorage.setItem(config.storage, JSON.stringify(choices));
-    } catch (e) {
-      /* private browsing - the choice just doesn't stick */
+    function el(tag, props) {
+        // An element rather than a tag name fills what is already there: a container Desmos
+        // handed us gets built up the same way one of ours does, nulls skipped and all.
+        var node = typeof tag === "string" ? document.createElement(tag) : tag;
+        var settings = props || {};
+        Object.keys(settings).forEach(function (key) {
+            var value = settings[key];
+            if (value === null || value === undefined) return;
+            if (key === "class") node.className = value;
+            else if (key === "text") node.textContent = value;
+            else if (key === "children") append(node, value);
+            // onclick, oninput, ... - a listener rather than an inline-handler attribute, so that
+            // several can be attached to the same node and none of them are strings.
+            else if (key.slice(0, 2) === "on" && typeof value === "function")
+                node.addEventListener(key.slice(2), value);
+            // checked / disabled / hidden only mean anything as properties; the rest are markup.
+            else if (typeof value === "boolean") node[key] = value;
+            else node.setAttribute(key, value);
+        });
+        for (var i = 2; i < arguments.length; i++) append(node, arguments[i]);
+        return node;
     }
-    listeners.slice().forEach(function (fn) {
-      try {
-        fn();
-      } catch (error) {
-        console.error("desmos: ui listener failed", error);
-      }
-    });
-    return true;
-  }
 
-  /** Is the page out of date - is something toggled on that isn't running, or vice versa? */
-  function dirty() {
-    return catalog.some(function (entry) {
-      return enabled(entry.id) !== entry.active;
-    });
-  }
+    var sheets = {};
 
-  function reload() {
-    g.location.reload();
-  }
-
-  // ---------------------------------------------------------------------------
-  // slots - a named mount point one extension offers and another fills
-  // ---------------------------------------------------------------------------
-
-  var slots = {};
-  // The elements currently mounted, and how to tear each one down. A slot may be filled
-  // before its renderer registers (Desmos decides when it mounts), so these are kept either
-  // way and drawn as soon as there is something to draw.
-  var mounted = [];
-
-  function draw(record) {
-    var render = slots[record.name];
-    if (!render || record.teardown !== null) return;
-    record.teardown = undefined;
-    try {
-      var teardown = render(record.root);
-      record.teardown = typeof teardown === "function" ? teardown : undefined;
-    } catch (error) {
-      record.teardown = undefined;
-      console.error('desmos: could not draw the "' + record.name + '" slot', error);
+    function css(key, text) {
+        if (sheets[key]) return;
+        sheets[key] = true;
+        var style = document.createElement("style");
+        style.setAttribute("data-desmos-ext", key);
+        style.textContent = text;
+        (document.head || document.documentElement).appendChild(style);
     }
-  }
 
-  function slot(name, render) {
-    slots[name] = render;
-    mounted.forEach(function (record) {
-      if (record.name === name) draw(record);
-    });
-  }
+    // ---------------------------------------------------------------------------
+    // which extensions are on
+    // ---------------------------------------------------------------------------
 
-  function mount(name, root) {
-    var record = { name: name, root: root, teardown: null };
-    mounted.push(record);
-    draw(record);
-    return root;
-  }
-
-  function unmount(root) {
-    mounted = mounted.filter(function (record) {
-      if (record.root !== root) return true;
-      if (record.teardown) {
+    function stored() {
         try {
-          record.teardown();
-        } catch (error) {
-          console.error('desmos: the "' + record.name + '" slot failed to tear down', error);
+            return JSON.parse(g.localStorage.getItem(config.storage)) || {};
+        } catch (e) {
+            return {};
         }
-      }
-      return false;
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // per-extension panels
-  // ---------------------------------------------------------------------------
-
-  // id -> the ui() hook it declared, with its setup() data already bound. Only extensions
-  // that are actually running have one, which is the point: a panel is a live extension's
-  // own settings, not a description of one that isn't there.
-  var panels = {};
-
-  function panel(id, render, data) {
-    panels[id] = function (root) {
-      return render(root, data);
-    };
-  }
-
-  function renderPanel(id, root) {
-    if (!panels[id]) return;
-    try {
-      panels[id](root);
-    } catch (error) {
-      console.error('desmos: extension "' + id + '" could not draw its settings', error);
     }
-  }
 
-  ext.ui = {
-    el: el,
-    css: css,
+    /** Whether `id` is meant to be running - what its toggle shows, not what is loaded. */
+    function enabled(id) {
+        var entry = byId[id];
+        if (!entry || !entry.supported) return false;
+        if (entry.forced) return true;
+        // ?ext= is the whole answer while it is there, so the toggles report the load itself.
+        if (config.overridden) return entry.active;
+        var choice = stored()[id];
+        return choice === undefined ? !!entry["default"] : !!choice;
+    }
 
-    list: function () {
-      return catalog.slice();
-    },
-    get: function (id) {
-      return byId[id];
-    },
-    enabled: enabled,
-    locked: locked,
-    setEnabled: setEnabled,
-    overridden: function () {
-      return !!config.overridden;
-    },
-    dirty: dirty,
-    onDirty: onDirty,
-    reload: reload,
+    function locked(id) {
+        var entry = byId[id];
+        return (
+            !entry || !entry.supported || entry.forced || !!config.overridden
+        );
+    }
 
-    slot: slot,
-    mount: mount,
-    unmount: unmount,
+    var listeners = [];
 
-    panel: panel,
-    hasPanel: function (id) {
-      return Object.prototype.hasOwnProperty.call(panels, id);
-    },
-    renderPanel: renderPanel,
-  };
+    function onDirty(fn) {
+        listeners.push(fn);
+        return function () {
+            listeners = listeners.filter(function (one) {
+                return one !== fn;
+            });
+        };
+    }
+
+    function setEnabled(id, on) {
+        if (locked(id)) return false;
+        var choices = stored();
+        choices[id] = !!on;
+        try {
+            g.localStorage.setItem(config.storage, JSON.stringify(choices));
+        } catch (e) {
+            /* private browsing - the choice just doesn't stick */
+        }
+        listeners.slice().forEach(function (fn) {
+            try {
+                fn();
+            } catch (error) {
+                console.error("desmos: ui listener failed", error);
+            }
+        });
+        return true;
+    }
+
+    /** Is the page out of date - is something toggled on that isn't running, or vice versa? */
+    function dirty() {
+        return catalog.some(function (entry) {
+            return enabled(entry.id) !== entry.active;
+        });
+    }
+
+    function reload() {
+        g.location.reload();
+    }
+
+    // ---------------------------------------------------------------------------
+    // slots - a named mount point one extension offers and another fills
+    // ---------------------------------------------------------------------------
+
+    var slots = {};
+    // The elements currently mounted, and how to tear each one down. A slot may be filled
+    // before its renderer registers (Desmos decides when it mounts), so these are kept either
+    // way and drawn as soon as there is something to draw.
+    var mounted = [];
+
+    function draw(record) {
+        var render = slots[record.name];
+        if (!render || record.teardown !== null) return;
+        record.teardown = undefined;
+        try {
+            var teardown = render(record.root);
+            record.teardown =
+                typeof teardown === "function" ? teardown : undefined;
+        } catch (error) {
+            record.teardown = undefined;
+            console.error(
+                'desmos: could not draw the "' + record.name + '" slot',
+                error
+            );
+        }
+    }
+
+    function slot(name, render) {
+        slots[name] = render;
+        mounted.forEach(function (record) {
+            if (record.name === name) draw(record);
+        });
+    }
+
+    function mount(name, root) {
+        var record = { name: name, root: root, teardown: null };
+        mounted.push(record);
+        draw(record);
+        return root;
+    }
+
+    function unmount(root) {
+        mounted = mounted.filter(function (record) {
+            if (record.root !== root) return true;
+            if (record.teardown) {
+                try {
+                    record.teardown();
+                } catch (error) {
+                    console.error(
+                        'desmos: the "' +
+                            record.name +
+                            '" slot failed to tear down',
+                        error
+                    );
+                }
+            }
+            return false;
+        });
+    }
+
+    // ---------------------------------------------------------------------------
+    // per-extension panels
+    // ---------------------------------------------------------------------------
+
+    // id -> the ui() hook it declared, with its setup() data already bound. Only extensions
+    // that are actually running have one, which is the point: a panel is a live extension's
+    // own settings, not a description of one that isn't there.
+    var panels = {};
+
+    function panel(id, render, data) {
+        panels[id] = function (root) {
+            return render(root, data);
+        };
+    }
+
+    function renderPanel(id, root) {
+        if (!panels[id]) return;
+        try {
+            panels[id](root);
+        } catch (error) {
+            console.error(
+                'desmos: extension "' + id + '" could not draw its settings',
+                error
+            );
+        }
+    }
+
+    ext.ui = {
+        el: el,
+        css: css,
+
+        list: function () {
+            return catalog.slice();
+        },
+        get: function (id) {
+            return byId[id];
+        },
+        enabled: enabled,
+        locked: locked,
+        setEnabled: setEnabled,
+        overridden: function () {
+            return !!config.overridden;
+        },
+        dirty: dirty,
+        onDirty: onDirty,
+        reload: reload,
+
+        slot: slot,
+        mount: mount,
+        unmount: unmount,
+
+        panel: panel,
+        hasPanel: function (id) {
+            return Object.prototype.hasOwnProperty.call(panels, id);
+        },
+        renderPanel: renderPanel
+    };
 }

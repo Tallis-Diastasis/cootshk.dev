@@ -15,7 +15,8 @@ extension({
         // The body has no braces of its own, so the whole method can be replaced outright.
         {
             match: /getGraphHashInUrl\(\)\{[^{}]*\}/,
-            replace: 'getGraphHashInUrl(){return location.hash.replace(/^#\\/?/,"").trim()||void 0}',
+            replace:
+                'getGraphHashInUrl(){return location.hash.replace(/^#\\/?/,"").trim()||void 0}',
             count: 1
         },
         // Writing: getURL() is what the save/open flow hands to history.pushState. This one's
@@ -25,7 +26,7 @@ extension({
         {
             match: /getURL\(\{includeHashForRecovery:(\i)\}=\{includeHashForRecovery:!1\}\)\{/,
             replace:
-                '$&{let h=(!this.recovery||$1)&&this.hash?this.hash:void 0;' +
+                "$&{let h=(!this.recovery||$1)&&this.hash?this.hash:void 0;" +
                 'if(h)return location.origin+location.pathname+location.search+"#"+h;}',
             count: 1
         },
@@ -43,6 +44,6 @@ extension({
         }
     ],
     ready() {
-        console.log("Started extensions!")
+        console.log("Started extensions!");
     }
-})
+});

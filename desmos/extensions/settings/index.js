@@ -5,7 +5,9 @@ extension({
         {
             match: /(class:"dcg-my-graphs-modal__tab",children:)(\i)\((.*?),children:\(\)=>(this\.controller\.\i)(\("account-shell-heading-mygraphs-examples"\)}\)}\)}\))/,
             count: 1,
-            replace: "\n$1$2($3,children:()=>$4$5,"+`$2("div", {
+            replace:
+                "\n$1$2($3,children:()=>$4$5," +
+                `$2("div", {
                 class: "dcg-my-graphs-modal__tab",
                 children: [
                     $2("a", {
@@ -32,7 +34,8 @@ extension({
         {
             match: /mq-narration-token = token(\n*)/,
             count: 1,
-            replace: `
+            replace:
+                `
 mq-narration-token = token
 cde-extensions-heading = Extensions
             `.trim() + "$1"
@@ -40,16 +43,15 @@ cde-extensions-heading = Extensions
         // The body. The modal picks between the example gallery and the graph tiles; wrap
         // that choice in one of our own so the tab gets the whole content area to itself.
         {
-            match:
-                /(\i)\(\(\)=>this\.myGraphsController\.getCurrentTab\(\)==="example-graphs"(&&[^,]*,\{true:\(\)=>(\i)\(\i,\{controller:this\.props\.controller}\),false:\(\)=>\i\(\i,\{controller:this\.props\.controller}\)})\)/,
+            match: /(\i)\(\(\)=>this\.myGraphsController\.getCurrentTab\(\)==="example-graphs"(&&[^,]*,\{true:\(\)=>(\i)\(\i,\{controller:this\.props\.controller}\),false:\(\)=>\i\(\i,\{controller:this\.props\.controller}\)})\)/,
             count: 1,
             replace:
                 '$1(()=>this.myGraphsController.getCurrentTab()==="cde-extensions",{' +
                 'true:()=>$3("div",{class:"cde-ext-tab",' +
                 'didMount:(e)=>window.__desmosExt.ui.mount("extensions",e),' +
-                'willUnmount:(e)=>window.__desmosExt.ui.unmount(e)}),' +
-                'false:()=>$1(()=>this.myGraphsController.getCurrentTab()==="example-graphs"$2)})',
-        },
+                "willUnmount:(e)=>window.__desmosExt.ui.unmount(e)})," +
+                'false:()=>$1(()=>this.myGraphsController.getCurrentTab()==="example-graphs"$2)})'
+        }
     ],
 
     main() {
@@ -61,7 +63,7 @@ cde-extensions-heading = Extensions
                 type: "search",
                 placeholder: "Search extensions",
                 "aria-label": "Search extensions",
-                oninput: filter,
+                oninput: filter
             });
 
             var reload = ui.el("button", {
@@ -69,7 +71,7 @@ cde-extensions-heading = Extensions
                 type: "button",
                 text: "Apply and Reload",
                 hidden: !ui.dirty(),
-                onclick: ui.reload,
+                onclick: ui.reload
             });
 
             var grid = ui.el("div", { class: "cde-ext__grid" });
@@ -80,14 +82,20 @@ cde-extensions-heading = Extensions
                     node: card(entry),
                     // id included: it is what ?ext= takes, so it is worth being able to
                     // search for even though the card shows the name.
-                    haystack: (entry.name + " " + entry.description + " " + entry.id).toLowerCase(),
+                    haystack: (
+                        entry.name +
+                        " " +
+                        entry.description +
+                        " " +
+                        entry.id
+                    ).toLowerCase()
                 };
             });
             grid.append.apply(
                 grid,
                 cards.map(function (one) {
                     return one.node;
-                }),
+                })
             );
 
             ui.el(
@@ -95,10 +103,13 @@ cde-extensions-heading = Extensions
                 null,
                 ui.el("div", { class: "cde-ext__bar" }, search, reload),
                 ui.overridden()
-                    ? ui.el("p", { class: "cde-ext__note", text: "?ext= in the URL is overriding these." })
+                    ? ui.el("p", {
+                          class: "cde-ext__note",
+                          text: "?ext= in the URL is overriding these."
+                      })
                     : null,
                 grid,
-                empty,
+                empty
             );
 
             function filter() {
@@ -128,7 +139,7 @@ cde-extensions-heading = Extensions
                 "aria-label": entry.name,
                 onchange: function () {
                     ui.setEnabled(entry.id, box.checked);
-                },
+                }
             });
 
             var toggle = ui.el(
@@ -139,36 +150,46 @@ cde-extensions-heading = Extensions
                         ? "Always on"
                         : ui.overridden()
                           ? "?ext= in the URL is overriding this"
-                          : null,
+                          : null
                 },
                 box,
-                ui.el("span", { class: "cde-ext-toggle__track" }),
+                ui.el("span", { class: "cde-ext-toggle__track" })
             );
 
             return ui.el(
                 "div",
                 {
-                    class: "cde-ext-card" + (entry.supported ? "" : " cde-ext-card--unsupported"),
+                    class:
+                        "cde-ext-card" +
+                        (entry.supported ? "" : " cde-ext-card--unsupported")
                 },
                 ui.el(
                     "div",
                     { class: "cde-ext-card__head" },
-                    ui.el("h3", { class: "cde-ext-card__name", text: entry.name }),
-                    toggle,
+                    ui.el("h3", {
+                        class: "cde-ext-card__name",
+                        text: entry.name
+                    }),
+                    toggle
                 ),
                 ui.el("p", {
                     class: "cde-ext-card__desc",
-                    text: entry.supported ? entry.description : "Not available on this calculator.",
+                    text: entry.supported
+                        ? entry.description
+                        : "Not available on this calculator."
                 }),
                 // A panel belongs to a running extension, so there is nothing to draw for one
                 // that has been switched off until the page is reloaded.
-                ui.hasPanel(entry.id) ? settings(entry) : null,
+                ui.hasPanel(entry.id) ? settings(entry) : null
             );
         }
 
         /** The "Settings" disclosure on a card, drawn the first time it is opened. */
         function settings(entry) {
-            var panel = ui.el("div", { class: "cde-ext-card__panel", hidden: true });
+            var panel = ui.el("div", {
+                class: "cde-ext-card__panel",
+                hidden: true
+            });
             var drawn = false;
             var button = ui.el("button", {
                 class: "cde-ext-card__more",
@@ -181,9 +202,9 @@ cde-extensions-heading = Extensions
                     if (drawn) return;
                     drawn = true;
                     ui.renderPanel(entry.id, panel);
-                },
+                }
             });
             return [button, panel];
         }
-    },
+    }
 });
