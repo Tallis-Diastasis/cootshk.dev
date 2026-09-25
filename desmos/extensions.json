@@ -1,19 +1,21 @@
 {
     "$schema": "/desmos/extensions.schema.json",
     "extensions": {
+        "beta3d": {
+            "name": "Beta3D",
+            "description": "Enables beta features in the 3D calculator.",
+            "supports": [
+                "3d"
+            ]
+        },
+        "bottomExpressions": {
+            "name": "Bottom Expressions",
+            "description": "Forces expression list to be on bottom."
+        },
         "core": {
             "name": "Core",
             "description": "Core patches used to load extensions.",
             "forceEnabled": true
-        },
-        "matrices": {
-            "name": "Matrices",
-            "description": "Add matrix support to the graphing calculator.",
-            "supports": [
-                "graphing",
-                "3d",
-                "geometry"
-            ]
         },
         "desmodder": {
             "name": "DesModder",
@@ -24,17 +26,31 @@
                 "geometry"
             ]
         },
-        "oneko": {
-            "name": "oneko",
-            "description": "cat follow mouse (real)"
-        },
         "limitlessLists": {
             "name": "Limitless Lists",
             "description": "Raises the 10,000 element cap on lists to 100,000,000."
         },
+        "matrices": {
+            "name": "Matrices",
+            "description": "Add matrix support to the graphing calculator.",
+            "supports": [
+                "graphing",
+                "3d",
+                "geometry"
+            ]
+        },
+        "monospace": {
+            "name": "Monospace",
+            "description": "Changes the font to monospace. (broken)",
+            "css": true
+        },
         "noRecursionLimit": {
             "name": "No Recursion Limit",
             "description": "Raises the recursion limit to 100,000,000."
+        },
+        "oneko": {
+            "name": "oneko",
+            "description": "cat follow mouse (real)"
         },
         "settings": {
             "name": "Settings",
