@@ -1,0 +1,42 @@
+@import url("https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css");
+
+.dcg-displayTextarea h1,
+.dcg-displayTextarea h2,
+.dcg-displayTextarea h3 {
+    margin: 4px 0;
+    font-weight: 600;
+}
+
+.dcg-displayTextarea p {
+    margin: 2px 0;
+}
+
+.dcg-displayTextarea ul {
+    margin: 4px 0 4px 16px;
+    padding: 0;
+}
+
+.dcg-displayTextarea li {
+    margin: 2px 0;
+}
+
+.dcg-displayTextarea pre {
+    background: #f3f3f3;
+    padding: 6px 8px;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 4px 0;
+    font-size: 12px;
+}
+
+.dcg-displayTextarea code {
+    background: #f3f3f3;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.dcg-displayTextarea pre code {
+    background: none;
+    padding: 0;
+}

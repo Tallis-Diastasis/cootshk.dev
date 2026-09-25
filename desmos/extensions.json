@@ -26,13 +26,21 @@
                 "geometry"
             ]
         },
+        "desmosMd": {
+            "name": "Desmos Markdown",
+            "description": "Adds markdown support to notes in the calculator.",
+            "supports": [
+                "graphing"
+            ],
+            "css": true
+        },
         "limitlessLists": {
             "name": "Limitless Lists",
             "description": "Raises the 10,000 element cap on lists to 100,000,000."
         },
         "matrices": {
             "name": "Matrices",
-            "description": "Add matrix support to the graphing calculator.",
+            "description": "Enables the use of matrices outside the Matrix Calculator.",
             "supports": [
                 "graphing",
                 "3d",
