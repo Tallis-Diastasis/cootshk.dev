@@ -1,0 +1,4 @@
+cdn/
+libs/
+.wrangler/
+node_modules/

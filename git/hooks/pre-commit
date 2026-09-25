@@ -1,0 +1,78 @@
+#!/bin/sh
+
+set -eu
+
+PRETTIER_VERSION="3.9.9"
+JS_PATTERN='\.(js|mjs|cjs|jsx)$'
+
+if [ -n "${SKIP_FORMAT:-}" ]; then
+    echo "pre-commit: SKIP_FORMAT set, not formatting."
+    exit 0
+fi
+
+# PATH Prettier when it is v3+, else the pinned one via npx. v2 differs on ternaries.
+prettier_mode=none
+if command -v prettier >/dev/null 2>&1; then
+    prettier_major=$(prettier --version 2>/dev/null | sed -n 's/^\([0-9]*\).*/\1/p')
+    if [ -n "$prettier_major" ] && [ "$prettier_major" -ge 3 ] 2>/dev/null; then
+        prettier_mode=path
+    fi
+fi
+if [ "$prettier_mode" = none ] && command -v npx >/dev/null 2>&1; then
+    prettier_mode=npx
+fi
+
+if [ "$prettier_mode" = none ]; then
+    echo "pre-commit: no usable Prettier (need 'prettier' >=3 on PATH, or npx)." >&2
+    echo "            Skipping JS formatting for this commit." >&2
+    exit 0
+fi
+
+# Reads NUL-separated paths on stdin.
+format_files() {
+    if [ "$prettier_mode" = path ]; then
+        xargs -0 prettier --write --ignore-unknown --log-level warn
+    else
+        xargs -0 npx --yes "prettier@$PRETTIER_VERSION" --write --ignore-unknown --log-level warn
+    fi
+}
+
+# Staged files (added/copied/modified/renamed) that Prettier should touch.
+staged=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR \
+    | grep -E "$JS_PATTERN" || true)
+
+if [ -z "$staged" ]; then
+    exit 0
+fi
+
+set -f
+IFS='
+'
+
+unstaged=$(git -c core.quotePath=false diff --name-only | grep -E "$JS_PATTERN" || true)
+
+printf '%s\n' "$staged" | tr '\n' '\0' | format_files
+
+restage=""
+skipped=""
+for file in $staged; do
+    if printf '%s\n' "$unstaged" | grep -qxF "$file"; then
+        skipped="$skipped$file$IFS"
+    else
+        restage="$restage$file$IFS"
+    fi
+done
+
+if [ -n "$restage" ]; then
+    printf '%s' "$restage" | tr '\n' '\0' | xargs -0 git add --
+fi
+
+if [ -n "$skipped" ]; then
+    echo "pre-commit: formatted, but not staged (these files are only partially staged):" >&2
+    for file in $skipped; do
+        echo "            $file" >&2
+    done
+    echo "            Review and 'git add' them yourself." >&2
+fi
+
+exit 0
