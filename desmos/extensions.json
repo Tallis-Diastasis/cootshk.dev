@@ -28,6 +28,14 @@
             "name": "oneko",
             "description": "cat follow mouse (real)"
         },
+        "limitlessLists": {
+            "name": "Limitless Lists",
+            "description": "Raises the 10,000 element cap on lists to 100,000,000."
+        },
+        "noRecursionLimit": {
+            "name": "No Recursion Limit",
+            "description": "Raises the recursion limit to 100,000,000."
+        },
         "settings": {
             "name": "Settings",
             "description": "Adds a settings pane to the saved graphs list.",
