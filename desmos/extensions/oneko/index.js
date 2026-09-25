@@ -7,7 +7,8 @@ extension({
                 .replace("(isReducedMotion)", "(false)"))
             .then(eval);
     },
+    // todo: will be added later
     stop() {
-        $("#oneko")?.remove();
+        document.querySelector("#oneko")?.remove();
     }
 })

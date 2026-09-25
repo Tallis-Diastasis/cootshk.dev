@@ -1,13 +1,12 @@
 // The UI extensions draw, and the runtime that hosts it.
 //
-// Desmos owns everything inside the frame, so an extension that wants to put something next
-// to its chrome has to build it in there - out here there is nothing but an <iframe>. This
-// file is the parent's copy of that runtime: uiRuntime() is serialized into the frame by
-// desmos.js the same way preamble() is. It brings no styling of its own - an extension that
-// needs some ships an index.css beside its index.js (see extensions/README.md), and the
-// loader hands it to ui.css() before any of its hooks run.
+// Desmos owns the whole document, so an extension that wants to put something next to its
+// chrome has to build it out of what Desmos put there. This runtime is what it builds with.
+// It brings no styling of its own - an extension that needs some ships an index.css beside
+// its index.js (see extensions/README.md), and the loader hands it to ui.css() before any of
+// its hooks run.
 //
-// Inside the frame it is window.__desmosExt.ui, and every frame-side hook can reach it:
+// It is window.__desmosExt.ui, and every hook that runs after the swap can reach it:
 //
 //   ui.el(tag, props, ...children)     build a DOM node - or fill one, if `tag` is already
 //                                      an element. `class` and `text` are spelled out, on*
@@ -15,7 +14,7 @@
 //                                      everything else an attribute. Null children are
 //                                      skipped, so `cond ? node : null` reads the way it
 //                                      looks (unlike Element.append, which writes "null").
-//   ui.css(key, text)                  add a stylesheet to the frame, once per key. An
+//   ui.css(key, text)                  add a stylesheet to the page, once per key. An
 //                                      extension's index.css arrives this way already; this
 //                                      is for anything that has to be computed.
 //
@@ -44,8 +43,8 @@
 // the grid, and styles it from its own index.css.
 
 /**
- * window.__desmosExt.ui, built inside the frame. Serialized with Function.prototype.toString
- * like preamble(), so it must not reference anything out here - `config` is all it gets:
+ * window.__desmosExt.ui. Called by desmos.js once the document has been swapped, before any
+ * extension hook, with:
  *
  *   { storage, overridden, extensions: [{id, name, description, supported, forced,
  *                                        default, active}] }
@@ -162,7 +161,7 @@ function uiRuntime(config) {
     return true;
   }
 
-  /** Is the frame out of date - is something toggled on that isn't running, or vice versa? */
+  /** Is the page out of date - is something toggled on that isn't running, or vice versa? */
   function dirty() {
     return catalog.some(function (entry) {
       return enabled(entry.id) !== entry.active;
@@ -170,11 +169,7 @@ function uiRuntime(config) {
   }
 
   function reload() {
-    try {
-      (g.parent || g).location.reload();
-    } catch (e) {
-      g.location.reload();
-    }
+    g.location.reload();
   }
 
   // ---------------------------------------------------------------------------

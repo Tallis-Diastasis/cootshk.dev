@@ -4,9 +4,9 @@ Each extension is a folder in here named after its id:
 
 ```
 extensions/
-  matrix/
+  matrices/
     index.js      the hooks
-    index.css     optional; loaded into the frame before they run
+    index.css     optional; injected before they run
 ```
 
 ## Adding an extension
@@ -23,7 +23,7 @@ Put a `patches` list in the object you hand to `extension()`. Each patch is
 
 ```js
 extension({
-  id: "matrix",
+  id: "matrices",
   patches: [
     { match: /\i\.includes\(\i\)\|\|(?=\i\.restrictedFunctions)/g, replace: "", count: 1 },
   ],
@@ -44,28 +44,28 @@ extension({
 patches.
 
 ## Drawing UI
-Desmos owns everything inside the frame, so an extension that wants to show
-something builds it there - stylesheet included. An `index.css` declared with
-`"css": true` is fetched with the script and put into the frame before any of the
-extension's code runs, so whatever it draws is styled the moment it appears.
+Desmos owns the whole document, so an extension that wants to show something
+builds it out of what Desmos put there - stylesheet included. An `index.css`
+declared with `"css": true` is fetched with the script and injected before any of
+the extension's code runs, so whatever it draws is styled the moment it appears.
 Write it against Desmos' own theme variables (`--dcg-custom-text-color`,
 `--dcg-custom-background-color`, `--dcg-custom-border-color`, `--dcg-accent-color`
 and friends, all with fallbacks) and it will follow the calculator rather than
 stand apart from it. `extensions/settings/index.css` is the worked example.
 
-A stylesheet cannot be `<link>`ed: the proxy rewrites every href handed to the
-frame, so the text is fetched out here and injected. That is also why a missing
+A stylesheet cannot be `<link>`ed: the proxy rewrites every href it is handed, so
+the text is fetched through `local.fetch` and injected. That is also why a missing
 one is only logged - the extension still runs, just unstyled.
 
 The rest of the toolkit is on `window.__desmosExt.ui` (see `../ui.js`), which
-every frame-side hook can reach.
+every hook that runs after the swap can reach.
 
 The easy way in is a `ui` hook, which gets a container on the extension's own
 card in the Extensions tab (the saved-graphs modal, next to "Examples"):
 
 ```js
 extension({
-  id: "matrix",
+  id: "matrices",
   ui(root, data) {
     const ui = window.__desmosExt.ui;
     ui.el(root, null, ui.el("label", {}, ui.el("input", { type: "checkbox" }), " Auto-transpose"));
@@ -73,10 +73,10 @@ extension({
 });
 ```
 
-`ui` is serialized and run in the frame like `main` and `ready`, so it must not
-reference anything outside itself; `data` is whatever `setup()` returned. Only a
-running extension has a panel - there is nothing to configure about one that is
-switched off.
+`ui` runs in this window like every other hook, so it is ordinary code - close
+over whatever you like; `data` is whatever `setup()` returned. Only a running
+extension has a panel - there is nothing to configure about one that is switched
+off.
 
 For anything that isn't a settings panel, patch Desmos to call
 `window.__desmosExt.ui.mount("<name>", el)` wherever you want the UI, and fill
@@ -92,6 +92,17 @@ window.__desmosExt.ui.slot("my-panel", (root) => {
 The rest of `ui` - `el`, `css` (for styling that has to be computed), the
 extension list, the toggles, `dirty`/`reload` - is documented at the top of
 `../ui.js`.
+
+## Fetching your own files
+Desmos runs in this document, which means the proxy's bootstrap has patched
+`fetch` and the `src`/`href` setters by the time `main()` and `ready()` run:
+anything root-relative it is handed picks up the `/_/desmos` prefix and goes to
+desmos.com. For a file of this site's own, use `ctx.fetch` (in `setup`) or
+`window.__desmosExt.fetch` (after the swap). See `../local.js`.
+
+Requests that *should* be rewritten - a third-party host that needs the proxy for
+CORS, say - want the ordinary `fetch`; `extensions/oneko` and
+`extensions/desmodder` both rely on that.
 
 ## Manifest flags
 `forceEnabled: true` pins an extension on: its toggle is locked, and `?ext=`

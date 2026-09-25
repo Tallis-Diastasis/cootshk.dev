@@ -1,4 +1,4 @@
-// Extension registry for the proxied Desmos frame. desmos.js is the loader that runs these.
+// Extension registry for the proxied Desmos page. desmos.js is the loader that runs these.
 //
 // An extension is a folder under extensions/ named after its id, holding an index.js and,
 // if it draws anything, an index.css. It is declared by hand in extensions.json:
@@ -26,24 +26,30 @@
 //
 // An extension is a plain object handed to extension(). Every hook is optional:
 //
-//   patches: [...]          parent - declarative rewrites of the Desmos bundle text
-//   html(doc, ctx)          parent - mutate the proxied page before it is written
-//   source(js, ctx) -> js   parent - rewrite the Desmos bundle text
-//   setup(ctx) -> data      parent - may fetch; the result is handed to main() and ready()
-//   main(data)              frame  - runs before the bundle does
-//   ready(Calc, data)       frame  - runs the moment Desmos assigns window.Calc
-//   ui(root, data)          frame  - draws this extension's settings on its card in the
-//                                    Extensions tab; see ui.js for what it can draw with
+//   patches: [...]          declarative rewrites of the Desmos bundle text
+//   html(doc, ctx)          mutate the proxied page before it replaces this one
+//   source(js, ctx) -> js   rewrite the Desmos bundle text
+//   setup(ctx) -> data      may fetch; the result is handed to ui(), main() and ready()
+//   ---                     the proxied page replaces this document here
+//   main(data)              runs before the bundle does
+//   ready(Calc, data)       runs the moment Desmos assigns window.Calc
+//   ui(root, data)          draws this extension's settings on its card in the Extensions
+//                           tab; see ui.js for what it can draw with
 //
-// An index.css is not a hook: the loader fetches it alongside index.js and puts it into the
-// frame before any of the extension's own code runs.
+// They run in that order, and all of them in this one window: Desmos does not get a frame of
+// its own (see desmos.js). So a hook is ordinary code - it may close over module scope, share
+// helpers with its neighbours and be broken on in a debugger, and `data` is passed to it
+// rather than serialized.
+//
+// The one rule is `local`: after the swap, the proxy's bootstrap has patched fetch and the
+// src/href setters, and anything of ours it is handed goes to desmos.com instead. Reach for
+// ctx.fetch (or __desmosExt.fetch) for a file of this site's own.
+//
+// An index.css is not a hook: the loader fetches it alongside index.js and injects it before
+// any of the extension's own code runs.
 //
 // `patches` runs before `source`, so an extension with both hands its own hook a bundle
 // that the patches have already been applied to. See the patches section below.
-//
-// main(), ready() and ui() are serialized with Function.prototype.toString and run inside
-// the frame, so they must not reference anything outside themselves - everything they need
-// comes through `data`, which is whatever setup() returned, and window.__desmosExt.
 //
 // `ownsBundle: true` means the extension executes the Desmos bundle itself and the loader
 // must not; DesModder fetches, patches and evals it.
@@ -157,7 +163,7 @@ function extensionUrl(id, file) {
 async function loadManifest() {
   // no-cache rather than the default: the manifest is hand-edited, and a stale copy means
   // an extension that was just added silently isn't there.
-  const res = await fetch(MANIFEST_URL, { cache: "no-cache" });
+  const res = await local.fetch(MANIFEST_URL, { cache: "no-cache" });
   if (!res.ok) throw new Error(`${MANIFEST_URL} -> ${res.status} ${res.statusText}`);
   const json = await res.json();
 
@@ -172,9 +178,9 @@ async function loadManifest() {
       // too). Null means all of them.
       supports: meta.supports || null,
       src: extensionUrl(id, meta.file || "index.js"),
-      // An extension's own stylesheet, fetched with its script and put into the frame
-      // before it runs. `true` is the index.css beside its index.js; a string names
-      // another file in the same folder.
+      // An extension's own stylesheet, fetched with its script and injected before it
+      // runs. `true` is the index.css beside its index.js; a string names another file in
+      // the same folder.
       css: meta.css ? extensionUrl(id, meta.css === true ? "index.css" : meta.css) : null,
       default: defaults.has(id),
       // Always on, ?ext= included: an extension that draws the settings UI is no use if it
@@ -198,7 +204,9 @@ function loadScript(entry) {
       entry.id,
       new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = entry.src;
+        // local.setAttribute, not script.src: by the time a graph change loads an extension
+        // for the first time, the proxy has patched that setter.
+        local.setAttribute.call(script, "src", entry.src);
         script.async = false;
         script.addEventListener("load", () => resolve());
         script.addEventListener("error", () => reject(new Error(`could not load ${entry.src}`)));
@@ -209,9 +217,9 @@ function loadScript(entry) {
   return scripts.get(entry.id);
 }
 
-// ...and one per stylesheet, for the same reason. The text is what gets handed to the
-// frame, so it is fetched rather than linked: the proxy bootstrap in there rewrites every
-// href it is given, and would send a <link> of ours off to desmos.com.
+// ...and one per stylesheet, for the same reason. Fetched rather than linked, and through
+// local.fetch: the proxy bootstrap rewrites every href it is given, and would send a <link>
+// of ours off to desmos.com.
 const sheets = new Map();
 
 function loadSheet(entry) {
@@ -219,7 +227,7 @@ function loadSheet(entry) {
   if (!sheets.has(entry.id)) {
     sheets.set(
       entry.id,
-      fetch(entry.css).then((res) => {
+      local.fetch(entry.css).then((res) => {
         if (!res.ok) throw new Error(`${entry.css} -> ${res.status} ${res.statusText}`);
         return res.text();
       }),
@@ -345,13 +353,12 @@ async function enabledExtensions(mode) {
 }
 
 // ---------------------------------------------------------------------------
-// what the frame's UI is told
+// what the UI is told
 // ---------------------------------------------------------------------------
 
 /**
- * The manifest as the frame sees it: everything ui.js needs to draw the Extensions tab,
- * and nothing that would not survive JSON. `active` is what this load actually started,
- * which is how the UI knows a toggle has been flipped since.
+ * The manifest as ui.js sees it: everything it needs to draw the Extensions tab. `active` is
+ * what this load actually started, which is how the UI knows a toggle has been flipped since.
  */
 function extensionCatalog(mode, active) {
   const running = new Set(active.map((entry) => entry.def.id));
@@ -366,7 +373,7 @@ function extensionCatalog(mode, active) {
   }));
 }
 
-/** The config uiRuntime() is handed inside the frame. */
+/** The config uiRuntime() is handed. */
 function uiConfig(mode, active) {
   return {
     storage: EXT_STORAGE,

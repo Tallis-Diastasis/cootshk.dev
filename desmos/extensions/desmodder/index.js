@@ -128,7 +128,7 @@ extension({
 
     // blob: URLs because DesModder assigns them to script.src / link.href, and the proxy
     // bootstrap rewrites everything it is handed there except blob: and data:. ctx.blob
-    // hands the loader the lifetime, so they are released when the frame is next replaced.
+    // hands the loader the lifetime, so they are released when the page is next loaded.
     const url = (name) => ctx.blob(files[name], DESMODDER_FILES[name][1]);
     return { version, preload: url("preload"), script: url("script"), css: url("css") };
   },
