@@ -28,6 +28,18 @@ extension({
                 '$&{let h=(!this.recovery||$1)&&this.hash?this.hash:void 0;' +
                 'if(h)return location.origin+location.pathname+location.search+"#"+h;}',
             count: 1
+        },
+        // Remove the login button on the topbar
+        {
+            match: /false:\(\)=>(\i)\("span",\{class:"dcg-login",(.*?)"account-shell-button-sign-up"\)([^\]]*?)]}\)/,
+            replace: "false: ()=>$1('span', {class:'dcg-login'})",
+            count: 1
+        },
+        // Login prompt in the expressions sheet
+        {
+            match: /this.isDismissedNotice\("authenticate"\)\)return"authenticate";/,
+            replace: "false && $&",
+            count: 1
         }
     ],
     ready() {
